@@ -1337,7 +1337,7 @@ return( base );
 }
 
 static struct macname *AddMacName(FILE *ttf,
-	int strlen, int stroff,int spec,int language, struct macname *last) {
+	int strlength, int stroff,int spec,int language, struct macname *last) {
     struct macname *new = chunkalloc(sizeof(struct macname));
     long pos = ftell(ttf);
     char *pt;
@@ -1346,11 +1346,11 @@ static struct macname *AddMacName(FILE *ttf,
     new->next = last;
     new->enc = spec;
     new->lang = language;
-    new->name = pt = malloc(strlen+1);
+    new->name = pt = malloc(strlength+1);
 
     fseek(ttf,stroff,SEEK_SET);
 
-    for ( i=0; i<strlen; ++i )
+    for ( i=0; i<strlength; ++i )
 	*pt++ = getc(ttf);
     *pt = '\0';
 
@@ -1359,18 +1359,18 @@ return( new );
 }
 
 static void MacFeatureAdd(FILE *ttf, struct ttfinfo *info, int id,
-	int strlen, int stroff,int spec,int language) {
+	int strlength, int stroff,int spec,int language) {
     MacFeat *f;
     struct macsetting *s;
 
     for ( f=info->features; f!=NULL; f=f->next ) {
 	if ( f->strid==id ) {
-	    f->featname = AddMacName(ttf,strlen,stroff,spec,language,f->featname);
+	    f->featname = AddMacName(ttf,strlength,stroff,spec,language,f->featname);
 return;
 	} else {
 	    for ( s=f->settings; s!=NULL; s=s->next ) {
 		if ( s->strid==id ) {
-		    s->setname = AddMacName(ttf,strlen,stroff,spec,language,s->setname);
+		    s->setname = AddMacName(ttf,strlength,stroff,spec,language,s->setname);
 return;
 		}
 	    }
@@ -1384,13 +1384,13 @@ return;
 	if ( mi==NULL ) {
 	    mi = chunkalloc(sizeof(struct macidname));
 	    mi->id = id;
-	    mi->last = mi->head = AddMacName(ttf,strlen,stroff,spec,language,NULL);
+	    mi->last = mi->head = AddMacName(ttf,strlength,stroff,spec,language,NULL);
 	    if ( p==NULL )
 		info->macstrids = mi;
 	    else
 		p->next = mi;
 	} else {
-	    mi->last->next = AddMacName(ttf,strlen,stroff,spec,language,NULL);
+	    mi->last->next = AddMacName(ttf,strlength,stroff,spec,language,NULL);
 	    mi->last = mi->last->next;
 	}
     }
@@ -1497,17 +1497,17 @@ return( ch1=='\0' );
 }
 
 static void TTFAddLangStr(FILE *ttf, struct ttfinfo *info, int id,
-	int strlen, int stroff,int plat,int spec,int language) {
+	int strlength, int stroff,int plat,int spec,int language) {
     struct ttflangname *cur, *prev;
     char *str;
 
     if ( plat==1 && id>=256 && (info->features!=NULL || info->fvar_start!=0)) {
-	MacFeatureAdd(ttf,info,id,strlen,stroff,spec,language);
+	MacFeatureAdd(ttf,info,id,strlength,stroff,spec,language);
 return;
     } else if ( id<0 || id>=ttf_namemax )
 return;
 
-    str = _readencstring(ttf,stroff,strlen,plat,spec,language);
+    str = _readencstring(ttf,stroff,strlength,plat,spec,language);
     if ( str==NULL )		/* we didn't understand the encoding */
 return;
     if ( id==ttf_postscriptname )
