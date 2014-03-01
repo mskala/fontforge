@@ -32,7 +32,6 @@
 #include "gresource.h"
 #include <string.h>
 #include <ustring.h>
-#include <glib/gprintf.h>
 #include <ffglib.h>
 
 #define DEL_SPACE	6
