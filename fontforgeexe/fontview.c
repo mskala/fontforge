@@ -934,7 +934,6 @@ static void _MenuExit(void *UNUSED(junk)) {
     for ( fv = fv_list; fv!=NULL; fv = next )
     {
 	next = (FontView *) (fv->b.next);
-	printf("fv:%p running webfont server:%d\n", fv, fv->pid_webfontserver );
 	FVStopWebFontServer( fv );
     }
 
@@ -5756,7 +5755,6 @@ static void FVMenuStartWebFontServer(GWindow gw, struct gmenuitem *UNUSED(mi), G
     if( !rc )
     {
 	fv->pid_webfontserver = 0;
-	fprintf(stderr, "Error starting collab webfont server\n");
 	if( error )
 	    fprintf(stderr, "code:%d message:%s\n", error->code, error->message );
     }
@@ -5779,7 +5777,6 @@ static int kill( int pid, int sig )
 
 static void FVStopWebFontServer( FontView *fv )
 {
-    printf("stop %d\n", fv->pid_webfontserver );
     if( fv->pid_webfontserver )
     {
 	kill( fv->pid_webfontserver, SIGTERM );
