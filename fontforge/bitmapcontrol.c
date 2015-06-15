@@ -234,10 +234,10 @@ return( false );
 	if ( bdfsf->subfontcnt!=0 && bd->which==bd_all ) {
 	    for ( j=0 ; j<bdfsf->subfontcnt; ++j ) {
 		subsf = bdfsf->subfonts[j];
+	        if ( usefreetype && freetypecontext==NULL )
+		    freetypecontext = FreeTypeFontContext(subsf,NULL, selfv, bd->layer);
 		for ( i=0; i<subsf->glyphcnt; ++i ) {
 		    if ( SCWorthOutputting(subsf->glyphs[i])) {
-			if ( usefreetype && freetypecontext==NULL )
-			    freetypecontext = FreeTypeFontContext(subsf,NULL, selfv, bd->layer);
 			ReplaceBDFC(subsf,sizes,i,freetypecontext,usefreetype, bd->layer);
 		    }
 		}
@@ -246,10 +246,10 @@ return( false );
 		freetypecontext = NULL;
 	    }
 	} else {
+	    if ( usefreetype && freetypecontext==NULL )
+	        freetypecontext = FreeTypeFontContext(sf,NULL, selfv, bd->layer);
 	    for ( i=0; i<fv->map->enccount; ++i ) {
 		if ( fv->selected[i] || bd->which == bd_all ) {
-		    if ( usefreetype && freetypecontext==NULL )
-			freetypecontext = FreeTypeFontContext(sf,NULL, selfv, bd->layer);
 		    ReplaceBDFC(sf,sizes,fv->map->map[i],freetypecontext,usefreetype, bd->layer);
 		}
 	    }
@@ -326,6 +326,7 @@ void BitmapsDoIt(CreateBitmapData *bd,int32 *sizes,int usefreetype) {
 	if ( bd->sf->onlybitmaps && bd->sf->bitmaps!=NULL ) {
 	    BDFFont *bdf;
 	    FontViewBase *fvs;
+            // Select the last bitmap font.
 	    for ( bdf=bd->sf->bitmaps; bdf->next!=NULL; bdf=bdf->next );
 	    for ( fvs = bd->sf->fv; fvs!=NULL; fvs= fvs->nextsame )
 		FVChangeDisplayBitmap(fvs,bdf);

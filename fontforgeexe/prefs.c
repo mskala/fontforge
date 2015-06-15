@@ -115,8 +115,6 @@ extern int old_sfnt_flags;		/* in savefont.c */
 extern int old_ps_flags;		/* in savefont.c */
 extern int old_validate;		/* in savefontdlg.c */
 extern int old_fontlog;			/* in savefontdlg.c */
-extern char *oflib_username;		/* in savefontdlg.c */
-extern char *oflib_password;		/* in savefontdlg.c */
 extern int oldsystem;			/* in bitmapdlg.c */
 extern int preferpotrace;		/* in autotrace.c */
 extern int autotrace_ask;		/* in autotrace.c */
@@ -149,7 +147,6 @@ extern int new_em_size;				/* in splineutil2.c */
 extern int new_fonts_are_order2;		/* in splineutil2.c */
 extern int loaded_fonts_same_as_new;		/* in splineutil2.c */
 extern int use_second_indic_scripts;		/* in tottfgpos.c */
-extern char *helpdir;				/* in uiutil.c */
 static char *othersubrsfile = NULL;
 extern MacFeat *default_mac_feature_map,	/* from macenc.c */
 		*user_mac_feature_map;
@@ -159,7 +156,6 @@ extern int allow_utf8_glyphnames;		/* in lookupui.c */
 extern int add_char_to_name_list;		/* in charinfo.c */
 extern int clear_tt_instructions_when_needed;	/* in cvundoes.c */
 extern int export_clipboard;			/* in cvundoes.c */
-extern int prefs_ensure_correct_extension;      /* in fontview.c */
 extern int cv_width;			/* in charview.c */
 extern int cv_height;			/* in charview.c */
 extern int interpCPsOnMotion;			/* in charview.c */
@@ -180,7 +176,6 @@ extern int ps_pointcnt;				/* from cvpalettes.c */
 extern float star_percent;			/* from cvpalettes.c */
 extern int home_char;				/* from fontview.c */
 extern int compact_font_on_open;		/* from fontview.c */
-extern int oflib_automagic_preview;		/* from oflib.c */
 extern int aa_pixelsize;			/* from anchorsaway.c */
 extern enum cvtools cv_b1_tool, cv_cb1_tool, cv_b2_tool, cv_cb2_tool; /* cvpalettes.c */
 extern int show_kerning_pane_in_class;		/* kernclass.c */
@@ -192,6 +187,10 @@ extern int prefs_cv_show_control_points_always_initially; /* from charview.c */
 extern int prefs_create_dragging_comparison_outline;      /* from charview.c */
 extern int prefs_cv_outline_thickness; /* from charview.c */
 
+extern char *pref_collab_last_server_connected_to; /* in collabclient.c */
+
+extern float OpenTypeLoadHintEqualityTolerance;  /* autohint.c */
+extern float GenerateHintWidthEqualityTolerance; /* splinesave.c */
 extern NameList *force_names_when_opening;
 extern NameList *force_names_when_saving;
 extern NameList *namelist_for_new_fonts;
@@ -297,8 +296,7 @@ static struct prefs_list {
 /* GT: this is because these strings are used in two different ways, one */
 /* GT: translated (which the user sees, and should probably have added spaces,*/
 /* GT: and one untranslated which needs the current odd format */
-	{ N_("ResourceFile"), pr_file, &xdefs_filename, NULL, NULL, 'R', NULL, 0, N_("When FontForge starts up, it loads display related resources from a\nproperty on the screen. Sometimes it is useful to be able to store\nthese resources in a file. These resources are only read at start\nup, so changing this has no effect until the next time you start\nFontForge.") },
-	{ N_("HelpDir"), pr_file, &helpdir, NULL, NULL, 'H', NULL, 0, N_("The directory on your local system in which FontForge will search for help\nfiles.  If a file is not found there, then FontForge will look for it on the net.") },
+	{ N_("ResourceFile"), pr_file, &xdefs_filename, NULL, NULL, 'R', NULL, 0, N_("When FontForge starts up, it loads the user interface theme from\nthis file. Any changes will only take effect the next time you start FontForge.") },
 	{ N_("OtherSubrsFile"), pr_file, &othersubrsfile, NULL, NULL, 'O', NULL, 0, N_("If you wish to replace Adobe's OtherSubrs array (for Type1 fonts)\nwith an array of your own, set this to point to a file containing\na list of up to 14 PostScript subroutines. Each subroutine must\nbe preceded by a line starting with '%%%%' (any text before the\nfirst '%%%%' line will be treated as an initial copyright notice).\nThe first three subroutines are for flex hints, the next for hint\nsubstitution (this MUST be present), the 14th (or 13 as the\nnumbering actually starts with 0) is for counter hints.\nThe subroutines should not be enclosed in a [ ] pair.") },
 	{ N_("FreeTypeInFontView"), pr_bool, &use_freetype_to_rasterize_fv, NULL, NULL, 'O', NULL, 0, N_("Use the FreeType rasterizer (when available)\nto rasterize glyphs in the font view.\nThis generally results in better quality.") },
 	{ N_("FreeTypeAAFillInOutlineView"), pr_bool, &use_freetype_with_aa_fill_cv, NULL, NULL, 'O', NULL, 0, N_("When filling using freetype in the outline view,\nhave freetype render the glyph antialiased.") },
@@ -307,7 +305,6 @@ static struct prefs_list {
 	{ N_("UseCairoDrawing"), pr_bool, &prefs_usecairo, NULL, NULL, '\0', NULL, 0, N_("Use the cairo library for drawing (if available)\nThis makes for prettier (anti-aliased) but slower drawing\nThis applies to any windows created AFTER this is set.\nAlready existing windows will continue as they are.") },
 #endif
 	{ N_("ExportClipboard"), pr_bool, &export_clipboard, NULL, NULL, '\0', NULL, 0, N_( "If you are running an X11 clipboard manager you might want\nto turn this off. FF can put things into its internal clipboard\nwhich it cannot export to X11 (things like copying more than\none glyph in the fontview). If you have a clipboard manager\nrunning it will force these to be exported with consequent\nloss of data.") },
-	{ N_("EnsureCorrectSaveExtension"), pr_bool, &prefs_ensure_correct_extension, NULL, NULL, '\0', NULL, 0, N_( "When inputting a name in the Save or SaveAs dialogs, FontForge can ensure that the correct filename extension (SFD or SFDIR) is always used. This prevents you from accidentally naming your source file with a binary extension (such as .otf), out of habit.") },
 	{ N_("AutoSaveFrequency"), pr_int, &AutoSaveFrequency, NULL, NULL, '\0', NULL, 0, N_( "The number of seconds between autosaves. If you set this to 0 there will be no autosaves.") },
 	{ N_("RevisionsToRetain"), pr_int, &prefRevisionsToRetain, NULL, NULL, '\0', NULL, 0, N_( "When Saving, keep this number of previous versions of the file. file.sfd-01 will be the last saved file, file.sfd-02 will be the file saved before that, and so on. If you set this to 0 then no revisions will be retained.") },
 	{ N_("UndoRedoLimitToSave"), pr_int, &UndoRedoLimitToSave, NULL, NULL, '\0', NULL, 0, N_( "The number of undo and redo operations which will be saved in sfd files.\nIf you set this to 0 undo/redo information is not saved to sfd files.\nIf set to -1 then all available undo/redo information is saved without limit.") },
@@ -327,6 +324,7 @@ static struct prefs_list {
 	{ N_("SeekCharacter"), pr_unicode, &home_char, NULL, NULL, '\0', NULL, 0, N_("When fontforge opens a (non-sfd) font it will try to display this unicode character in the fontview.")},
 	{ N_("CompactOnOpen"), pr_bool, &compact_font_on_open, NULL, NULL, 'O', NULL, 0, N_("When a font is opened, should it be made compact?")},
 	{ N_("UndoRedoLimitToLoad"), pr_int, &UndoRedoLimitToLoad, NULL, NULL, '\0', NULL, 0, N_( "The number of undo and redo operations to load from sfd files.\nWith this option you can disregard undo information while loading SFD files.\nIf set to 0 then no undo/redo information is loaded.\nIf set to -1 then all available undo/redo information is loaded without limit.") },
+	{ N_("OpenTypeLoadHintEqualityTolerance"), pr_real, &OpenTypeLoadHintEqualityTolerance, NULL, NULL, '\0', NULL, 0, N_( "When importing an OpenType font, for the purposes of hinting spline points might not exactly match boundaries. For example, a point might be -0.0002 instead of exactly 0\nThis setting gives the user some control over this allowing a small tolerance value to be fed into the OpenType loading code.\nComparisons are then not performed for raw equality but for equality within tolerance (e.g., values within the range -0.0002 to 0.0002 will be considered equal to 0 when figuring out hints).") },
 	PREFS_LIST_EMPTY
 },
   navigation_list[] = {
@@ -400,6 +398,9 @@ static struct prefs_list {
  generate_list[] = {
 	{ N_("AskBDFResolution"), pr_bool, &ask_user_for_resolution, NULL, NULL, 'B', NULL, 0, N_("When generating a set of BDF fonts ask the user\nto specify the screen resolution of the fonts\notherwise FontForge will guess depending on the pixel size.") },
 	{ N_("AutoHint"), pr_bool, &autohint_before_generate, NULL, NULL, 'H', NULL, 0, N_("AutoHint changed glyphs before generating a font") },
+
+	{ N_("GenerateHintWidthEqualityTolerance"), pr_real, &GenerateHintWidthEqualityTolerance, NULL, NULL, '\0', NULL, 0, N_( "When generating a font, ignore slight rounding errors for hints that should be at the top or bottom of the glyph. For example, you might like to set this to 0.02 so that 19.999 will be considered 20. But only for the hint width value.") },
+	
 	PREFS_LIST_EMPTY
 },
  hints_list[] = {
@@ -471,8 +472,6 @@ static struct prefs_list {
 	{ "DefaultBitmapFormat", pr_int, &oldbitmapstate, NULL, NULL, '\0', NULL, 1, NULL },
 	{ "SaveValidate", pr_int, &old_validate, NULL, NULL, '\0', NULL, 1, NULL },
 	{ "SaveFontLogAsk", pr_int, &old_fontlog, NULL, NULL, '\0', NULL, 1, NULL },
-	{ "OFLibUsername", pr_string, &oflib_username, NULL, NULL, '\0', NULL, 1, NULL },
-	{ "OFLibPassword", pr_string, &oflib_password, NULL, NULL, '\0', NULL, 1, NULL },
 	{ "DefaultSFNTflags", pr_int, &old_sfnt_flags, NULL, NULL, '\0', NULL, 1, NULL },
 	{ "DefaultPSflags", pr_int, &old_ps_flags, NULL, NULL, '\0', NULL, 1, NULL },
 	{ "PageWidth", pr_int, &pagewidth, NULL, NULL, '\0', NULL, 1, NULL },
@@ -502,13 +501,13 @@ static struct prefs_list {
 	{ "FCShowHidden", pr_bool, &gfc_showhidden, NULL, NULL, '\0', NULL, 1, NULL },
 	{ "FCDirPlacement", pr_int, &gfc_dirplace, NULL, NULL, '\0', NULL, 1, NULL },
 	{ "FCBookmarks", pr_string, &gfc_bookmarks, NULL, NULL, '\0', NULL, 1, NULL },
-	{ "OFLibAutomagicPreview", pr_int, &oflib_automagic_preview, NULL, NULL, '\0', NULL, 1, NULL },
 	{ "DefaultMVType",   pr_int, &mv_type, NULL, NULL, '\0', NULL, 1, NULL },
 	{ "DefaultMVWidth",  pr_int, &mv_width, NULL, NULL, '\0', NULL, 1, NULL },
 	{ "DefaultMVHeight", pr_int, &mv_height, NULL, NULL, '\0', NULL, 1, NULL },
 	{ "DefaultBVWidth", pr_int, &bv_width, NULL, NULL, '\0', NULL, 1, NULL },
 	{ "DefaultBVHeight", pr_int, &bv_height, NULL, NULL, '\0', NULL, 1, NULL },
 	{ "AnchorControlPixelSize", pr_int, &aa_pixelsize, NULL, NULL, '\0', NULL, 1, NULL },
+	{ "CollabLastServerConnectedTo", pr_string, &pref_collab_last_server_connected_to, NULL, NULL, '\0', NULL, 1, NULL },
 #ifdef _NO_LIBCAIRO
 	{ "UseCairoDrawing", pr_bool, &prefs_usecairo, NULL, NULL, '\0', NULL, 0, N_("Use the cairo library for drawing (if available)\nThis makes for prettier (anti-aliased) but slower drawing\nThis applies to any windows created AFTER this is set.\nAlready existing windows will continue as they are.") },
 #endif
@@ -772,14 +771,17 @@ return( false );
 static char *getPfaEditPrefs(void) {
     static char *prefs=NULL;
     char buffer[1025];
+    char *ffdir;
 
     if ( prefs!=NULL )
-return( prefs );
-    if ( getFontForgeUserDir(Config)==NULL )
-return( NULL );
-    sprintf(buffer,"%s/prefs", getFontForgeUserDir(Config));
+        return prefs;
+    ffdir = getFontForgeUserDir(Config);
+    if ( ffdir==NULL )
+        return NULL;
+    sprintf(buffer,"%s/prefs", ffdir);
+    free(ffdir);
     prefs = copy(buffer);
-return( prefs );
+    return prefs;
 }
 
 static char *PrefsUI_getFontForgeShareDir(void) {
@@ -929,7 +931,7 @@ static int encmatch(const char *enc,int subok) {
 
     int i;
     char buffer[80];
-#if HAVE_ICONV_H
+#if HAVE_ICONV
     static char *last_complaint;
 
     iconv_t test;
@@ -952,7 +954,7 @@ return( encs[i].enc );
 	    if ( strstrmatch(enc,encs[i].name)!=NULL )
 return( encs[i].enc );
 
-#if HAVE_ICONV_H
+#if HAVE_ICONV
 	/* I only try to use iconv if the encoding doesn't match one I support*/
 	/*  loading iconv unicode data takes a while */
 	test = iconv_open(enc,FindUnicharName());
@@ -1029,20 +1031,13 @@ static void DefaultXUID(void) {
     g_random_set_seed(tv.tv_usec+1);
     r2 = g_random_int();
     sprintf( buffer, "1021 %d %d", r1, r2 );
-    free(xuid);
+    if (xuid != NULL) free(xuid);
     xuid = copy(buffer);
-}
-
-static void DefaultHelp(void) {
-    if ( helpdir==NULL ) {
-	helpdir = copy(getHelpDir());
-    }
 }
 
 static void PrefsUI_SetDefaults(void) {
 
     DefaultXUID();
-    DefaultHelp();
     local_encoding = DefaultEncoding();
 }
 
@@ -1192,15 +1187,13 @@ static void PrefsUI_LoadPrefs(void)
 {
     char *prefs = getPfaEditPrefs();
     FILE *p;
-    char line[1100];
+    char line[1100], path[PATH_MAX];
     int i, j, ri=0, mn=0, ms=0, fn=0, ff=0, filt_max=0;
     int msp=0, msc=0;
-    char *pt;
+    char *pt, *real_xdefs_filename = NULL;
     struct prefs_list *pl;
 
-#if !defined(NOPLUGIN)
     LoadPluginDir(NULL);
-#endif
     LoadPfaEditEncodings();
     LoadGroupList();
 
@@ -1305,10 +1298,9 @@ static void PrefsUI_LoadPrefs(void)
     //
     // If the user has no theme set, then use the default
     //
-    if ( !xdefs_filename )
+    real_xdefs_filename = xdefs_filename;
+    if ( !real_xdefs_filename )
     {
-	char path[PATH_MAX];
-
 	fprintf(stderr,"no xdefs_filename!\n");
 	if (!quiet) {
 	    fprintf(stderr,"TESTING: getPixmapDir:%s\n", getPixmapDir() );
@@ -1318,11 +1310,10 @@ static void PrefsUI_LoadPrefs(void)
 	snprintf(path, PATH_MAX, "%s/%s", getPixmapDir(), "resources" );
 	if (!quiet)
 	    fprintf(stderr,"trying default theme:%s\n", path );
-	if(GFileExists(path))
-	    change_res_filename( path );
+	real_xdefs_filename = path;
     }
-    if ( xdefs_filename!=NULL )
-	GResourceAddResourceFile(xdefs_filename,GResourceProgramName,true);
+    GResourceAddResourceFile(real_xdefs_filename,GResourceProgramName,true);
+
     if ( othersubrsfile!=NULL && ReadOtherSubrsFile(othersubrsfile)<=0 )
 	fprintf( stderr, "Failed to read OtherSubrs from %s\n", othersubrsfile );
 
@@ -1956,7 +1947,7 @@ return( true );
 	    for ( pt=xuid; *pt==' ' ; ++pt );
 	    if ( *pt=='[' ) {	/* People who know PS well, might want to put brackets arround the xuid base array, but I don't want them */
 		pt = copy(pt+1);
-		free( xuid );
+		if (xuid != NULL) free( xuid );
 		xuid = pt;
 	    }
 	    for ( pt=xuid+strlen(xuid)-1; pt>xuid && *pt==' '; --pt );
@@ -2649,10 +2640,11 @@ void LastFonts_Save(void) {
     if ( ffdir ) {
         sprintf(buffer, "%s/FontsOpenAtLastQuit", ffdir);
         preserve = fopen(buffer,"w");
+        free(ffdir);
     }
 
     for ( fv = fv_list; fv!=NULL; fv = next ) {
-	next = (FontView *) (fv->b.next);
+        next = (FontView *) (fv->b.next);
         if ( preserve ) {
             SplineFont *sf = fv->b.cidmaster?fv->b.cidmaster:fv->b.sf;
             fprintf(preserve, "%s\n", sf->filename?sf->filename:sf->origname);

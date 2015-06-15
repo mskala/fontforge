@@ -153,7 +153,7 @@ void SFUndoPerform( SFUndoes* undo, SplineFont* sf )
 
 	SFD_GetFontMetaDataData d;
 	SFD_GetFontMetaDataData_Init( &d );
-	visitSFDFragment( sfd, sf, SFD_GetFontMetaData, &d );
+	visitSFDFragment( sfd, sf, SFD_GetFontMetaDataVoid, &d );
 	break;
     case sfut_lookups_kerns:
     case sfut_lookups:
@@ -199,6 +199,8 @@ void SFUndoPerform( SFUndoes* undo, SplineFont* sf )
 	    SFDFixupRefs( sf );
 	}
 	break;
+    default:
+        break;
     }
 }
 

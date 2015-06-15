@@ -41,7 +41,7 @@ int default_fv_row_count = 4;
 int default_fv_col_count = 16;
 int default_fv_font_size = 48;
 int default_fv_antialias=true;
-int default_fv_bbsized=true;
+int default_fv_bbsized=false;
 int snaptoint=0;
 
 /*#define DEBUG	1*/
@@ -922,7 +922,6 @@ Spline *ApproximateSplineFromPointsSlopes(SplinePoint *from, SplinePoint *to,
     bigreal offn_, offp_, finaldiff;
     bigreal pt_pf_x, pt_pf_y, determinant;
     bigreal consts[2], rt_terms[2], rf_terms[2];
- bigreal rfbad=0, rtbad=0;
 
     /* If all the selected points are at the same spot, and one of the */
     /*  end-points is also at that spot, then just copy the control point */
@@ -1032,10 +1031,6 @@ return( SplineMake3(from,to));
 	if ( (to->pointtype==pt_curve || to->pointtype==pt_hvcurve) &&
 		to->next && !to->nonextcp ) {
 	    tounit.x = to->me.x-to->nextcp.x; tounit.y = to->me.y-to->nextcp.y;
-/* Doesn't work
-	} else if ( to->pointtype==pt_tangent && to->next ) {
-	    tounit.x = to->me.x-to->next->to->me.x; tounit.y = to->me.y-to->next->to->me.y;
-*/
 	} else {
 	    tounit.x = -( (3*temp.splines[0].a*.9999+2*temp.splines[0].b)*.9999+temp.splines[0].c );
 	    tounit.y = -( (3*temp.splines[1].a*.9999+2*temp.splines[1].b)*.9999+temp.splines[1].c );
@@ -1048,10 +1043,6 @@ return( SplineMake3(from,to));
 	if ( (from->pointtype==pt_curve || from->pointtype==pt_hvcurve) &&
 		from->prev && !from->noprevcp ) {
 	    fromunit.x = from->me.x-from->prevcp.x; fromunit.y = from->me.y-from->prevcp.y;
-/*
-	} else if ( from->pointtype==pt_tangent && from->prev ) {
-	    fromunit.x = from->me.x-from->prev->from->me.x; fromunit.y = from->me.y-from->prev->from->me.y;
-*/
 	} else {
 	    fromunit.x = ( (3*temp.splines[0].a*.0001+2*temp.splines[0].b)*.0001+temp.splines[0].c );
 	    fromunit.y = ( (3*temp.splines[1].a*.0001+2*temp.splines[1].b)*.0001+temp.splines[1].c );
@@ -1127,12 +1118,7 @@ return( SplineMake3(from,to));
 	    to->noprevcp = rt==0;
 return( SplineMake3(from,to));
 	}
-	
-  rfbad = rf; rtbad = -rt;
-    } else
-  rfbad = rtbad = -2;
-
-
+    }
 
     trylen = (to->me.x-from->me.x)*fromunit.x + (to->me.y-from->me.y)*fromunit.y;
     if ( trylen>flen ) flen = trylen;
@@ -1696,8 +1682,8 @@ static TPoint *SplinesFigureTPsBetween(SplinePoint *from, SplinePoint *to,
 return( tp );
 }
 
-static void SplinePointReCatagorize(SplinePoint *sp,int oldpt) {
-    SplinePointCatagorize(sp);
+static void SplinePointReCategorize(SplinePoint *sp,int oldpt) {
+    SplinePointCategorize(sp);
     if ( sp->pointtype!=oldpt ) {
 	if ( sp->pointtype==pt_curve && oldpt==pt_hvcurve &&
 		((sp->nextcp.x == sp->me.x && sp->nextcp.y != sp->me.y ) ||
@@ -1735,8 +1721,8 @@ void SplinesRemoveBetween(SplineChar *sc, SplinePoint *from, SplinePoint *to,int
     
     free(tp);
 
-    SplinePointReCatagorize(from,oldfpt);
-    SplinePointReCatagorize(to,oldtpt);
+    SplinePointReCategorize(from,oldfpt);
+    SplinePointReCategorize(to,oldtpt);
 }
 
 static void RemoveZeroLengthSplines(SplineSet *spl, int onlyselected, bigreal bound) {
@@ -1804,6 +1790,7 @@ return;
 		SplinePointFree(curp);
 		if ( spl->first==curp ) {
 		    spl->first = next;
+		    spl->start_offset = 0;
 		    if ( spl->last==curp )
 			spl->last = next;
 		} else if ( spl->last==curp )
@@ -2055,6 +2042,7 @@ return( NULL );			/* Some one else should free it and reorder the spline set lis
 	    SplineFree(spl->first->next);
 	    SplinePointMDFree(sc,spl->first);
 	    spl->first = nextp;
+	    spl->start_offset = 0;
 	    nextp->prev = NULL;
 	}
 	while ( spl->last->selected ) {
@@ -2067,6 +2055,7 @@ return( NULL );			/* Some one else should free it and reorder the spline set lis
     } else {
 	while ( spl->first->selected ) {
 	    spl->first = spl->first->next->to;
+	    spl->start_offset = 0;
 	    spl->last = spl->first;
 	}
     }
@@ -2270,8 +2259,8 @@ return( false );
 	    SplineFree(sp->next);
 	    SplinePointMDFree(sc,sp);
 	}
-	SplinePointCatagorize(from);
-	SplinePointCatagorize(to);
+	SplinePointCategorize(from);
+	SplinePointCategorize(to);
     } else {
 	SplineFree(from->next);
 	from->next = afterfrom->prev;
@@ -2326,7 +2315,7 @@ static int Spline2Interpolate(SplinePoint *mid, bigreal err) {
 return( good );
 }
 
-int SPInterpolate(SplinePoint *sp) {
+int SPInterpolate(const SplinePoint *sp) {
     /* Using truetype rules, can we interpolate this point? */
 return( !sp->dontinterpolate && !sp->nonextcp && !sp->noprevcp &&
 	    !sp->roundx && !sp->roundy &&
@@ -2623,6 +2612,7 @@ static void SPLForceLines(SplineChar *sc,SplineSet *ss,bigreal bump_size) {
 			if ( s->from==ss->first ) {
 			    if ( ss->first==ss->last ) ss->last = sp;
 			    ss->first = sp;
+			    ss->start_offset = 0;
 			}
 			SplinePointMDFree(sc,s->from);
 			sp->next = s; s->from = sp;
@@ -2659,7 +2649,10 @@ static void SPLForceLines(SplineChar *sc,SplineSet *ss,bigreal bump_size) {
 			if ( sp->prev==first ) first = NULL;
 			SplineFree(sp->prev);
 			if ( s->to==ss->last ) {
-			    if ( ss->first==ss->last ) ss->first = sp;
+			    if ( ss->first==ss->last ) {
+			      ss->first = sp;
+			      ss->start_offset = 0;
+			    }
 			    ss->last = sp;
 			}
 			SplinePointMDFree(sc,s->to);
@@ -2833,8 +2826,10 @@ static void SPLStartToExtremum(SplineChar *sc,SplinePointList *spl) {
 		if ( sp==spl->first )
 	    break;
 	    }
-	    if ( sp!=spl->first )
+	    if ( sp!=spl->first ) {
 		spl->first = spl->last = sp;
+		spl->start_offset = 0;
+	    }
 	}
 	spl = spl->next;
     }
@@ -2904,8 +2899,10 @@ return;		/* Ignore any splines which are just dots */
 		else if ( sp->next->to == nsp )
 	      goto nogood;		/* Nothing to remove */
 		if ( SplinesRemoveBetweenMaybe(sc,sp,nsp,smpl->flags,smpl->err)) {
-		    if ( spl->last==spl->first )
+		    if ( spl->last==spl->first ) {
 			spl->last = spl->first = sp;	/* We know this point didn't get removed */
+			spl->start_offset = 0;
+		    }
 		}
 	      nogood:
 		sp = nsp;
@@ -2924,6 +2921,7 @@ return;
 	    if ( spl->first==spl->last )
 		spl->last = first;
 	    spl->first = first;
+	    spl->start_offset = 0;
 	}
     }
 
@@ -2941,8 +2939,10 @@ return;
 return;
 	if ( smpl->flags!=sf_cleanup ) {
 	    if ( SplinesRemoveMidMaybe(sc,sp,smpl->flags,smpl->err,lenmax2) ) {
-		if ( spl->first==sp )
+		if ( spl->first==sp ) {
 		    spl->first = next;
+		    spl->start_offset = 0;
+		}
 		if ( spl->last==sp )
 		    spl->last = next;
     continue;
@@ -3015,7 +3015,7 @@ SplineSet *SplineCharSimplify(SplineChar *sc,SplineSet *head,
 	}
     }
     SplineSetsRemoveAnnoyingExtrema(head,.3);
-    SPLCatagorizePoints(head);
+    SPLCategorizePoints(head);
     /* printf( "nocnt=%d totcnt=%d curdif=%d incr=%d\n", nocnt_cnt, totcnt_cnt, curdiff_cnt, incr_cnt ); */ /* Debug!!! */
 return( head );
 }
@@ -3046,6 +3046,7 @@ void SPLStartToLeftmost(SplineChar *sc,SplinePointList *spl, int *changed) {
 	    }
 	    SplineSetSpirosClear(spl);
 	    spl->first = spl->last = best;
+	    spl->start_offset = 0;
 	}
     }
 }
@@ -3276,6 +3277,8 @@ SplineSet *SplineSetJoin(SplineSet *start,int doall,real fudge,int *changed) {
 			SplineSetJoinCpFixup(spl->first);
 			spl->first = spl2->first;
 			spl2->first = spl2->last = NULL;
+			spl->start_offset = 0;
+			spl2->start_offset = 0;
 			if ( prev!=NULL )
 			    prev->next = spl2->next;
 			else
@@ -3290,6 +3293,7 @@ SplineSet *SplineSetJoin(SplineSet *start,int doall,real fudge,int *changed) {
 			} else
 			    SplineSetSpirosClear(spl);
 			spl2->last = spl2->first = NULL;
+			spl2->start_offset = 0;
 			SplinePointListFree(spl2);
 			SplineSetMakeLoop(spl,fudge);
 			*changed = true;
@@ -3318,7 +3322,10 @@ SplineSet *SplineCharRemoveTiny(SplineChar *sc,SplineSet *head) {
 		if ( spline->from==spline->to )
 	    break;
 		if ( spl->last==spline->from ) spl->last = NULL;
-		if ( spl->first==spline->from ) spl->first = NULL;
+		if ( spl->first==spline->from ) {
+		  spl->first = NULL;
+		  spl->start_offset = 0;
+		}
 		if ( first==spline->from->prev ) first=NULL;
 		/*SplinesRemoveBetween(sc,spline->from->prev->from,spline->to);*/
 		spline->to->prevcp = spline->from->prevcp;
@@ -3330,7 +3337,10 @@ SplineSet *SplineCharRemoveTiny(SplineChar *sc,SplineSet *head) {
 		SplinePointFree(spline->from);
 		SplineFree(spline);
 		if ( first==NULL ) first = next->from->prev;
-		if ( spl->first==NULL ) spl->first = next->from;
+		if ( spl->first==NULL ) {
+		  spl->first = next->from;
+		  spl->start_offset = 0;
+		}
 		if ( spl->last==NULL ) spl->last = next->from;
 	    } else {
 		if ( first==NULL ) first = spline;
@@ -3756,8 +3766,10 @@ void SplineSetAddExtrema(SplineChar *sc, SplineSet *ss,enum ae_type between_sele
 	break;
 	    nextp = sp->next->to;
 	    if ( sp->ticked ) {
-		if ( sp==ss->first )
+		if ( sp==ss->first ) {
 		    ss->first = ss->last = nextp;
+		    ss->start_offset = 0;
+		}
 		SplinesRemoveBetween(sc,sp->prev->from,nextp,1);
 	    }
 	    sp = nextp;
@@ -3789,6 +3801,7 @@ SplineFont *SplineFontEmpty(void) {
 
     sf = calloc(1,sizeof(SplineFont));
     sf->pfminfo.fstype = -1;
+    sf->pfminfo.stylemap = -1;
     sf->top_enc = -1;
     sf->macstyle = -1;
     sf->desired_row_cnt = default_fv_row_count; sf->desired_col_cnt = default_fv_col_count;
@@ -3812,10 +3825,10 @@ SplineFont *SplineFontEmpty(void) {
 
     sf->layer_cnt = 2;
     sf->layers = calloc(2,sizeof(LayerInfo));
-    sf->layers[0].name = copy(_("Back"));
-    sf->layers[0].background = true;
-    sf->layers[1].name = copy(_("Fore"));
-    sf->layers[1].background = false;
+    sf->layers[ly_back].name = copy(_("Back"));
+    sf->layers[ly_back].background = true;
+    sf->layers[ly_fore].name = copy(_("Fore"));
+    sf->layers[ly_fore].background = false;
     sf->grid.background = true;
 
 return( sf );
@@ -3855,6 +3868,7 @@ SplineFont *SplineFontBlank(int charcnt) {
     sf->glyphmax = charcnt;
     sf->glyphs = calloc(charcnt,sizeof(SplineChar *));
     sf->pfminfo.fstype = -1;
+    sf->pfminfo.stylemap = -1;
     sf->use_typo_metrics = true;
 return( sf );
 }
@@ -4566,7 +4580,7 @@ SplineSet *SplineSetReverse(SplineSet *spl) {
     Spline *spline, *first, *next;
     BasePoint tp;
     SplinePoint *temp;
-    int bool;
+    int flag;
     int i;
     /* reverse the splineset so that what was the start point becomes the end */
     /*  and vice versa. This entails reversing every individual spline, and */
@@ -4580,12 +4594,12 @@ return( spl );			/* Only one point, reversal is meaningless */
     tp = spline->from->nextcp;
     spline->from->nextcp = spline->from->prevcp;
     spline->from->prevcp = tp;
-    bool = spline->from->nonextcp;
+    flag = spline->from->nonextcp;
     spline->from->nonextcp = spline->from->noprevcp;
-    spline->from->noprevcp = bool;
-    bool = spline->from->nextcpdef;
+    spline->from->noprevcp = flag;
+    flag = spline->from->nextcpdef;
     spline->from->nextcpdef = spline->from->prevcpdef;
-    spline->from->prevcpdef = bool;
+    spline->from->prevcpdef = flag;
 
     for ( ; spline!=NULL && spline!=first; spline=next ) {
 	next = spline->to->next;
@@ -4594,12 +4608,12 @@ return( spl );			/* Only one point, reversal is meaningless */
 	    tp = spline->to->nextcp;
 	    spline->to->nextcp = spline->to->prevcp;
 	    spline->to->prevcp = tp;
-	    bool = spline->to->nonextcp;
+	    flag = spline->to->nonextcp;
 	    spline->to->nonextcp = spline->to->noprevcp;
-	    spline->to->noprevcp = bool;
-	    bool = spline->to->nextcpdef;
+	    spline->to->noprevcp = flag;
+	    flag = spline->to->nextcpdef;
 	    spline->to->nextcpdef = spline->to->prevcpdef;
-	    spline->to->prevcpdef = bool;
+	    spline->to->prevcpdef = flag;
 	}
 
 	temp = spline->to;
@@ -4614,6 +4628,7 @@ return( spl );			/* Only one point, reversal is meaningless */
     if ( spl->first!=spl->last ) {
 	temp = spl->first;
 	spl->first = spl->last;
+	spl->start_offset = 0;
 	spl->last = temp;
 	spl->first->prev = NULL;
 	spl->last->next = NULL;

@@ -39,10 +39,11 @@
 #include <glib.h>
 
 #include "gutils/unicodelibinfo.h"
+#include "psfont.h"
 
 int32 unicode_from_adobestd[256];
 struct lconv localeinfo;
-char *coord_sep = ",";
+const char *coord_sep = ",";
 int quiet = 0;
 
 static void initadobeenc(void) {
@@ -82,13 +83,16 @@ static void initlibrarysearchpath(void) {
 
 static void initlibltdl(void) {
     char buffer[2000];
+    char *userConfigDir;
 
     if (!plugins_are_initialized()) {
         init_plugins();
-        if (getFontForgeUserDir(Config)!=NULL ) {
-            strcpy(buffer,getFontForgeUserDir(Config));
+        userConfigDir = getFontForgeUserDir(Config);
+        if ( userConfigDir != NULL ) {
+            strcpy(buffer,userConfigDir);
             strcat(buffer,"/plugins");
-            lt_dladdsearchdir(strdup(buffer));
+            free(userConfigDir);
+            lt_dladdsearchdir(buffer);
         }
     }
 }
@@ -117,6 +121,9 @@ void doinitFontForgeMain(void) {
 
     if ( inited )
 return;
+#ifdef __MINGW32__
+    FindProgDir(NULL);
+#endif
     InitSimpleStuff();
     if ( default_encoding==NULL )
 	default_encoding=FindOrMakeEncoding("ISO8859-1");
@@ -128,8 +135,7 @@ return;
 void doversion(const char *source_version_str) {
     if ( source_version_str!=NULL )
 	printf( "fontforge %s\n", source_version_str );
-    printf( "libfontforge %d%s\n",
-	    library_version_configuration.library_source_versiondate,
-	    library_version_configuration.config_had_multilayer?"-ML":"" );
+    printf( "libfontforge %d\n",
+	    FONTFORGE_VERSIONDATE_RAW );
 exit(0);
 }

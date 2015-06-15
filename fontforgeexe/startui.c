@@ -81,9 +81,19 @@ extern void setup_cocoa_app();
 /* For reasons obscure to me RunApplicationEventLoop is not defined in */
 /*  the mac header files if we are in 64 bit mode. Strangely it seems to */
 /*  be in the libraries and functional */
-#  if __LP64__
-extern void RunApplicationEventLoop(void);
-#  endif
+/*
+ * It was found in Dec 2014 that using RunApplicationEventLoop() could induce strange
+ * and extremely frustrating pausing issues on osx. The main generic event handling
+ * seems to work just fine, so there doesn't seem to be a need for this specialized
+ * Application Event Loop.
+ * 
+ * See this issue bringing back Breakpad usage and the issues linked in comments 2,3
+ * by adrientetar:
+ * https://github.com/fontforge/fontforge/issues/2120
+ */
+//#  if __LP64__
+//extern void RunApplicationEventLoop(void);
+//#  endif
 #endif
 
 #if defined(__MINGW32__)
@@ -97,7 +107,21 @@ extern int AutoSaveFrequency;
 int splash = 1;
 static int localsplash;
 static int unique = 0;
-static int listen_to_apple_events = false;
+
+/**
+ * In osx versions prior to 10.9.x a special -psn_ flag was supplied
+ * when fontforge was run by osx in some cases. For opening an sfd
+ * file from finder we need to register the openWith event in order to
+ * get the name of the file to open. So it makes sense to always
+ * register for Apple events on OSX so that we can get those file
+ * names as they come through.
+ */
+#if defined(__Mac)
+    static int listen_to_apple_events = true; // This was once true, but Apple broke it.
+#else
+    static int listen_to_apple_events = false;
+#endif
+static bool ProcessPythonInitFiles = 1;
 
 static void _dousage(void) {
     printf( "fontforge [options] [fontfiles]\n" );
@@ -234,20 +258,21 @@ static void SplashLayout() {
 
     pt += u_strlen(pt);
     lines[linecnt++] = pt;
-    uc_strcpy(pt,"  git hash: ");;
+    uc_strcpy(pt,"  git hash: ");
     pt += u_strlen(pt);
     lines[linecnt++] = pt;
+    uc_strcat(pt, " ");
     uc_strcat(pt, FONTFORGE_GIT_VERSION);
 
     pt += u_strlen(pt);
     lines[linecnt++] = pt;
-    uc_strcpy(pt,"  Version: ");;
-    uc_strcat(pt,source_modtime_str);
+    uc_strcpy(pt,"  Version: ");
+    uc_strcat(pt,FONTFORGE_MODTIME_STR);
 
     pt += u_strlen(pt);
     lines[linecnt++] = pt;
     uc_strcat(pt,"           (");
-    uc_strcat(pt,source_version_str);
+    uc_strcat(pt,FONTFORGE_MODTIME_STR);
     uc_strcat(pt,"-ML");
 #ifdef FREETYPE_HAS_DEBUGGER
     uc_strcat(pt,"-TtfDb");
@@ -262,7 +287,7 @@ static void SplashLayout() {
     pt += u_strlen(pt);
     lines[linecnt++] = pt;
     uc_strcpy(pt,"  Lib Version: ");
-    uc_strcat(pt,library_version_configuration.library_source_modtime_string);
+    uc_strcat(pt,FONTFORGE_MODTIME_STR);
     lines[linecnt++] = pt+u_strlen(pt);
     lines[linecnt] = NULL;
     is = u_strchr(msg,'(');
@@ -380,7 +405,7 @@ static pascal OSErr OpenApplicationAE( const AppleEvent * theAppleEvent,
 	start_splash_screen();
     system( "DYLD_LIBRARY_PATH=\"\"; osascript -e 'tell application \"X11\" to activate'" );
     if ( fv_list==NULL )
-	MenuOpen(NULL,NULL,NULL);
+	_FVMenuOpen(NULL);
  fprintf( logfile, " event processed %d.\n", noErr ); fflush( logfile );
 return( noErr );
 }
@@ -392,7 +417,7 @@ static pascal OSErr ReopenApplicationAE( const AppleEvent * theAppleEvent,
 	start_splash_screen();
     system( "DYLD_LIBRARY_PATH=\"\"; osascript -e 'tell application \"X11\" to activate'" );
     if ( fv_list==NULL )
-	MenuOpen(NULL,NULL,NULL);
+	_FVMenuOpen(NULL);
  fprintf( logfile, " event processed %d.\n", noErr ); fflush( logfile );
 return( noErr );
 }
@@ -621,7 +646,7 @@ return( true );
 	    if ( strcmp(arg,"-new")==0 || strcmp(arg,"--new")==0 )
 		FontNew();
 	    else if ( strcmp(arg,"-open")==0 || strcmp(arg,"--open")==0 )
-		MenuOpen(NULL,NULL,NULL);
+		_FVMenuOpen(NULL);
 	    else if ( strcmp(arg,"-quit")==0 || strcmp(arg,"--quit")==0 )
 		MenuExit(NULL,NULL,NULL);
 	    else
@@ -657,18 +682,21 @@ static int ReopenLastFonts(void) {
     FILE *old;
     int any = 0;
 
-    if ( ffdir==NULL )
-return( false );
+    if ( ffdir==NULL ) return false;
+
     sprintf( buffer, "%s/FontsOpenAtLastQuit", ffdir );
     old = fopen(buffer,"r");
-    if ( old==NULL )
-return( false );
+    if ( old==NULL ) {
+        free(ffdir);
+        return false;
+    }
     while ( fgets(buffer,sizeof(buffer),old)!=NULL ) {
-	if ( ViewPostScriptFont(g_strchomp(buffer),0)!=0 )
-	    any = 1;
+    if ( ViewPostScriptFont(g_strchomp(buffer),0)!=0 )
+        any = 1;
     }
     fclose(old);
-return( any );
+    free(ffdir);
+    return any;
 }
 
 #if defined(__Mac)
@@ -779,6 +807,7 @@ static void ensureDotFontForgeIsSetup() {
     }
     ffensuredir( basedir, "",       S_IRWXU );
     ffensuredir( basedir, "python", S_IRWXU );
+    free(basedir);
 }
 
 static void DoAutoRecoveryPostRecover_PromptUserGraphically(SplineFont *sf)
@@ -790,6 +819,51 @@ static void DoAutoRecoveryPostRecover_PromptUserGraphically(SplineFont *sf)
     gwwv_ask( _("Recovery Complete"),(const char **) buts,0,1,_("Your file %s has been recovered.\nYou must now Save your file to continue working on it."), sf->filename );
     _FVMenuSaveAs( (FontView*)sf->fv );
 }
+
+#if defined(__MINGW32__) && !defined(_NO_LIBCAIRO)
+/**
+ * \brief Load fonts from the specified folder for the UI to use.
+ * This should only be used if Cairo is used on Windows, which defaults to the
+ * Win32 font backend.
+ * This is an ANSI version, so files which contain characters outside of the
+ * user's locale will fail to be loaded.
+ * \param prefix The folder to read fonts from. Currently the pixmaps folder
+ *               and the folder 'ui-fonts' in the FontForge preferences folder.
+ */
+static void WinLoadUserFonts(const char *prefix) {
+    HANDLE fileHandle;
+    WIN32_FIND_DATA fileData;
+    char path[MAX_PATH], *ext;
+    HRESULT ret;
+    int i;
+
+    if (prefix == NULL) {
+        return;
+    }
+    ret = snprintf(path, MAX_PATH, "%s/*.???", prefix);
+    if (ret <= 0 || ret >= MAX_PATH) {
+        return;
+    }
+
+    fileHandle = FindFirstFileA(path, &fileData);
+    if (fileHandle != INVALID_HANDLE_VALUE) do {
+        ext = strrchr(fileData.cFileName, '.');
+        if (!ext || (strcasecmp(ext, ".ttf") && strcasecmp(ext, ".ttc") &&
+                     strcasecmp(ext,".otf")))
+        {
+            continue;
+        }
+        ret = snprintf(path, MAX_PATH, "%s/%s", prefix, fileData.cFileName);
+        if (ret > 0 && ret < MAX_PATH) {
+            //printf("WIN32-FONT-TEST: %s\n", path);
+            ret = AddFontResourceExA(path, FR_PRIVATE, NULL);
+            //if (ret > 0) {
+            //    printf("\tLOADED FONT OK!\n");
+            //}
+        }
+    } while (FindNextFileA(fileHandle, &fileData) != 0);
+}
+#endif
 
 
 int fontforge_main( int argc, char **argv ) {
@@ -807,8 +881,11 @@ int fontforge_main( int argc, char **argv ) {
     int ds, ld;
     int openflags=0;
     int doopen=0, quit_request=0;
+    bool use_cairo = true;
 
+#if !(GLIB_CHECK_VERSION(2, 35, 0))
     g_type_init();
+#endif
 
     /* Must be done before we cache the current directory */
     /* Change to HOME dir if specified on the commandline */
@@ -830,7 +907,7 @@ int fontforge_main( int argc, char **argv ) {
         fprintf( stderr, "Copyright (c) 2000-2014 by George Williams. See AUTHORS for Contributors.\n" );
         fprintf( stderr, " License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>\n" );
         fprintf( stderr, " with many parts BSD <http://fontforge.org/license.html>. Please read LICENSE.\n" );
-        fprintf( stderr, " Executable based on sources from %s"
+        fprintf( stderr, " Based on sources from %s"
 	        "-ML"
 #ifdef FREETYPE_HAS_DEBUGGER
 	        "-TtfDb"
@@ -842,9 +919,8 @@ int fontforge_main( int argc, char **argv ) {
 	        "-D"
 #endif
 	        ".\n",
-	        source_modtime_str );
-        fprintf( stderr, " Library based on sources from %s.\n", library_version_configuration.library_source_modtime_string );
-        fprintf( stderr, " Based on source from git with hash:%s\n", FONTFORGE_GIT_VERSION );
+	        FONTFORGE_MODTIME_STR );
+        fprintf( stderr, " Based on source from git with hash: %s\n", FONTFORGE_GIT_VERSION );
     }
 
 #if defined(__Mac)
@@ -900,14 +976,12 @@ int fontforge_main( int argc, char **argv ) {
 
 #if defined(__MINGW32__)
     {
-	char  path[MAX_PATH+4];
-	char  *c = path;
-	unsigned int  len = GetModuleFileNameA(NULL, path, MAX_PATH);
-	path[len] = '\0';
-	for(; *c; *c++) /* backslash to slash */
-	    if(*c == '\\')
-		*c = '/';
-	GResourceSetProg(path);
+        char path[MAX_PATH];
+        unsigned int len = GetModuleFileNameA(NULL, path, MAX_PATH);
+        path[len] = '\0';
+        
+        //The '.exe' must be removed as resources presumes it's not there.
+        GResourceSetProg(GFileRemoveExtension(GFileNormalizePath(path)));
     }
 #else
     GResourceSetProg(argv[0]);
@@ -963,6 +1037,7 @@ int fontforge_main( int argc, char **argv ) {
 	char shareDir[PATH_MAX];
 	char* sd = getShareDir();
 	strncpy( shareDir, sd, PATH_MAX );
+    shareDir[PATH_MAX-1] = '\0';
 	if(!sd) {
 	    strcpy( shareDir, SHAREDIR );
 	}
@@ -985,10 +1060,8 @@ int fontforge_main( int argc, char **argv ) {
     if ( default_encoding==NULL )
 	default_encoding=&custom;	/* In case iconv is broken */
 
-    // This check also starts the embedded python,
-    // we must call PythonUI_Init() before CheckIsScript()
-    // to allow GUI code to potentially add extra methods to the
-    // python objects.
+    // This no longer starts embedded Python unless control passes to the Python executors,
+    // which exit independently rather than returning here.
     CheckIsScript(argc,argv); /* Will run the script and exit if it is a script */
 					/* If there is no UI, there is always a script */
 			                /*  and we will never return from the above */
@@ -1021,15 +1094,18 @@ int fontforge_main( int argc, char **argv ) {
 # endif
 	else if ( strncmp(pt,"-usecairo",strlen("-usecairo"))==0 ) {
 	    if ( strcmp(pt,"-usecairo=no")==0 )
-		GDrawEnableCairo(false);
+	        use_cairo = false;
 	    else
-		GDrawEnableCairo(true);
+	        use_cairo = true;
+	    GDrawEnableCairo(use_cairo);
 	} else if ( strcmp(pt,"-nosplash")==0 )
 	    splash = 0;
 	else if ( strcmp(pt,"-quiet")==0 )
 	    /* already checked for this earlier, no need to do it again */;
 	else if ( strcmp(pt,"-unique")==0 )
 	    unique = 1;
+	else if ( strcmp(pt,"-forceuihidden")==0 )
+	    cmdlinearg_forceUIHidden = 0;
 	else if ( strcmp(pt,"-recover")==0 && i<argc-1 ) {
 	    ++i;
 	    if ( strcmp(argv[i],"none")==0 )
@@ -1057,7 +1133,7 @@ int fontforge_main( int argc, char **argv ) {
 	else if ( strcmp(pt,"-help")==0 )
 	    dousage();
 	else if ( strcmp(pt,"-version")==0 || strcmp(pt,"-v")==0 || strcmp(pt,"-V")==0 )
-	    doversion(source_version_str);
+	    doversion(FONTFORGE_MODTIME_STR);
 	else if ( strcmp(pt,"-quit")==0 )
 	    quit_request = true;
 	else if ( strcmp(pt,"-home")==0 )
@@ -1069,26 +1145,67 @@ int fontforge_main( int argc, char **argv ) {
 	    /* structure, and the current directory was (shudder) "/" */
 	    /* (however, we changed to HOME earlier in main routine). */
 	    unique = 1;
-	    listen_to_apple_events = true;
+	    listen_to_apple_events = true; // This has been problematic on Mavericks and later.
 	}
 #endif
     }
 
     ensureDotFontForgeIsSetup();
+#if defined(__MINGW32__) && !defined(_NO_LIBCAIRO)
+    //Load any custom fonts for the user interface
+    if (use_cairo) {
+        char *system_load = getGResourceProgramDir();
+        char *user_load = getFontForgeUserDir(Data);
+        char lbuf[MAX_PATH];
+        int lret;
+
+        if (system_load != NULL) {
+            //Follow the FontConfig APPSHAREFONTDIR location
+            lret = snprintf(lbuf, MAX_PATH, "%s/../share/fonts", system_load);
+            if (lret > 0 && lret < MAX_PATH) {
+                WinLoadUserFonts(lbuf);
+            }
+        }
+        if (user_load != NULL) {
+            lret = snprintf(lbuf, MAX_PATH, "%s/%s", user_load, "ui-fonts");
+            if (lret > 0 && lret < MAX_PATH) {
+                WinLoadUserFonts(lbuf);
+            }
+            free(user_load);
+        }
+    }
+#endif
+    InitImageCache(); // This is in gtextinfo.c. It zeroes imagecache for us.
+    atexit(&ClearImageCache); // We register the destructor, which is also in gtextinfo.c.
     GDrawCreateDisplays(display,argv[0]);
+    atexit(&GDrawDestroyDisplays); // We register the destructor so that it runs even if we call exit without finishing this function.
     default_background = GDrawGetDefaultBackground(screen_display);
     InitToolIconClut(default_background);
     InitToolIcons();
     InitCursors();
+
+    /**
+     * we have to do a quick sniff of argv[] here to see if the user
+     * wanted to skip loading these python init files.
+     */
+    for ( i=1; i<argc; ++i ) {
+	char *pt = argv[i];
+
+	if ( !strcmp(pt,"-SkipPythonInitFiles")) {
+	    ProcessPythonInitFiles = 0;
+	}
+    }
+    
 #ifndef _NO_PYTHON
-    PyFF_ProcessInitFiles();
+/*# ifndef GWW_TEST*/
+    FontForge_InitializeEmbeddedPython(); /* !!!!!! debug (valgrind doesn't like python) */
+/*# endif*/
 #endif
 
-    /* Wait until the UI has started, otherwise people who don't have consoles*/
-    /*  open won't get our error messages, and it's an important one */
-    /* Scripting doesn't care about a mismatch, because scripting interpretation */
-    /*  all lives in the library */
-    check_library_version(&exe_library_version_configuration,true,false);
+#ifndef _NO_PYTHON
+    if( ProcessPythonInitFiles )
+	PyFF_ProcessInitFiles();
+#endif
 
     /* the splash screen used not to have a title bar (wam_nodecor) */
     /*  but I found I needed to know how much the window manager moved */
@@ -1153,12 +1270,8 @@ exit( 0 );
     if ( recover==-1 )
 	CleanAutoRecovery();
     else if ( recover )
-    {
-	any = DoAutoRecoveryExtended( recover-1,
-				      DoAutoRecoveryPostRecover_PromptUserGraphically );
-    }
-
-
+	any = DoAutoRecoveryExtended( recover-1 );
+			
     openflags = 0;
     for ( i=1; i<argc; ++i ) {
 	char buffer[1025];
@@ -1175,16 +1288,19 @@ exit( 0 );
 	    MenuNewComposition(NULL,NULL,NULL);
 	    any = 1;
 #  endif
+	} else if ( !strcmp(pt,"-SkipPythonInitFiles")) {
+	    // already handled above.
 	} else if ( strcmp(pt,"-last")==0 ) {
 	    if ( next_recent<RECENT_MAX && RecentFiles[next_recent]!=NULL )
 		if ( ViewPostScriptFont(RecentFiles[next_recent++],openflags))
 		    any = 1;
 	} else if ( strcmp(pt,"-sync")==0 || strcmp(pt,"-memory")==0 ||
-		strcmp(pt,"-nosplash")==0 || strcmp(pt,"-recover=none")==0 ||
-		strcmp(pt,"-recover=clean")==0 || strcmp(pt,"-recover=auto")==0 ||
-		strcmp(pt,"-dontopenxdevices")==0 || strcmp(pt,"-unique")==0 ||
-		strncmp(pt,"-usecairo",strlen("-usecairo"))==0 ||
-		strcmp(pt,"-home")==0 || strcmp(pt,"-quiet")==0 )
+		    strcmp(pt,"-nosplash")==0 || strcmp(pt,"-recover=none")==0 ||
+		    strcmp(pt,"-recover=clean")==0 || strcmp(pt,"-recover=auto")==0 ||
+		    strcmp(pt,"-dontopenxdevices")==0 || strcmp(pt,"-unique")==0 ||
+		    strncmp(pt,"-usecairo",strlen("-usecairo"))==0 ||
+		    strcmp(pt,"-home")==0 || strcmp(pt,"-quiet")==0
+		    || strcmp(pt,"-forceuihidden")==0 )
 	    /* Already done, needed to be before display opened */;
 	else if ( strncmp(pt,"-psn_",5)==0 )
 	    /* Already done */;
@@ -1199,6 +1315,7 @@ exit( 0 );
 	else if ( strcmp(pt,"-open")==0 )
 	    doopen = true;
 	else {
+	    printf("else argv[i]:%s\n", argv[i] );
 	    if ( strstr(argv[i],"://")!=NULL ) {		/* Assume an absolute URL */
 		strncpy(buffer,argv[i],sizeof(buffer));
 		buffer[sizeof(buffer)-1]= '\0';
@@ -1243,19 +1360,41 @@ exit( 0 );
 
     collabclient_ensureClientBeacon();
     collabclient_sniffForLocalServer();
+#ifndef _NO_PYTHON
+    PythonUI_namedpipe_Init();
+#endif
 
 #if defined(__Mac)
     if ( listen_to_apple_events ) {
 	install_apple_event_handlers();
 	install_mac_timer();
 	setup_cocoa_app();
-	RunApplicationEventLoop();
+
+	
+	// WARNING: See declaration of RunApplicationEventLoop() above as to
+	// why you might not want to call that function anymore.
+	// RunApplicationEventLoop();
+	
     } else
 #endif
     if ( doopen || !any )
-	MenuOpen(NULL,NULL,NULL);
+	_FVMenuOpen(NULL);
     GDrawEventLoop(NULL);
+    GDrawDestroyDisplays();
 
+#ifndef _NO_PYTHON
+/*# ifndef GWW_TEST*/
+    FontForge_FinalizeEmbeddedPython(); /* !!!!!! debug (valgrind doesn't like python) */
+/*# endif*/
+#endif
+
+    // These free menu translations, mostly.
+    BitmapViewFinishNonStatic();
+    MetricsViewFinishNonStatic();
+    CharViewFinishNonStatic();
+    FontViewFinishNonStatic();
+
+    ClearImageCache(); // This frees the contents of imagecache.
     hotkeysSave();
     LastFonts_Save();
 

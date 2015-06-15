@@ -662,7 +662,7 @@ static void AdjustSplineSet(TD *td,int order2) {
 	    new->last = lastsp;
 
 	for ( sp = new->first; sp!=NULL; ) {
-	    SplinePointCatagorize(sp);
+	    SplinePointCategorize(sp);
 	    if ( sp->next==NULL )
 	break;
 	    sp = sp->next->to;
@@ -695,7 +695,7 @@ static void TileSplineSets(TD *td,SplineSet **head,int order2) {
 	} else
 	    prev = spl;
     }
-    SPLCatagorizePoints(td->result);
+    SPLCategorizePoints(td->result);
     if ( *head==NULL )
 	*head = td->result;
     else {
@@ -1010,6 +1010,7 @@ static void TPDInit(TilePathDlg *tpd,SplineFont *sf) {
     tpd->dummy_sf.glyphs = tpd->chars;
     tpd->dummy_sf.glyphcnt = tpd->dummy_sf.glyphmax = 4;
     tpd->dummy_sf.pfminfo.fstype = -1;
+    tpd->dummy_sf.pfminfo.stylemap = -1;
     tpd->dummy_sf.fontname = tpd->dummy_sf.fullname = tpd->dummy_sf.familyname = "dummy";
     tpd->dummy_sf.weight = "Medium";
     tpd->dummy_sf.origname = "dummy";
@@ -1701,6 +1702,7 @@ static void PTDInit(TilePathDlg *ptd,SplineFont *sf) {
     ptd->dummy_sf.glyphs = ptd->chars;
     ptd->dummy_sf.glyphcnt = ptd->dummy_sf.glyphmax = 1;
     ptd->dummy_sf.pfminfo.fstype = -1;
+    ptd->dummy_sf.pfminfo.stylemap = -1;
     ptd->dummy_sf.fontname = ptd->dummy_sf.fullname = ptd->dummy_sf.familyname = "dummy";
     ptd->dummy_sf.weight = "Medium";
     ptd->dummy_sf.origname = "dummy";

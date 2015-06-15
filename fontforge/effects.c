@@ -123,9 +123,10 @@ static SplineSet *SpMove(SplinePoint *sp,real offset,
     new->prevcp.x += offset;
     new->prev = new->next = NULL;
 
-    if ( cur->first==NULL )
+    if ( cur->first==NULL ) {
 	cur->first = new;
-    else
+	cur->start_offset = 0;
+    } else
 	SplineMake(cur->last,new,sp->next->order2);
     cur->last = new;
 
@@ -533,9 +534,11 @@ static int MidLineCompetes(Spline *s,bigreal t,bigreal shadow_length,SplineSet *
     int ret;
 
     ret = ClipLineTo3D(line,spl);
-    SplinePointFree(line->to);		/* This might not be the same as to */
-    SplinePointFree(line->from);	/* This will be the same as from */
-    SplineFree(line);
+    if ( ret == false ) {
+        SplinePointFree(line->to);		/* This might not be the same as to */
+        SplinePointFree(line->from);	/* This will be the same as from */
+        SplineFree(line);
+    }
 return( !ret );
 }
 
@@ -583,6 +586,7 @@ static SplineSet *MergeLinesToBottoms(SplineSet *bottoms,SplineSet *lines) {
 		prev->next = l->next;
 	    SplineMake(l->first,bottoms->first,l->first->next->order2);
 	    bottoms->first = l->first;
+	    bottoms->start_offset = 0;
 	    SplineFree(l->last->prev);
 	    SplinePointFree(l->last);
 	    chunkfree(l,sizeof(*l));

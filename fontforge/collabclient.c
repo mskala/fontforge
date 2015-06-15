@@ -28,8 +28,12 @@
 
 int pref_collab_sessionJoinTimeoutMS = 1000;
 int pref_collab_roundTripTimerMS = 2000;
+char* pref_collab_last_server_connected_to = 0;
 
 #include "collabclientpriv.h"
+#include "inc/basics.h"
+
+int DEBUG_SHOW_SFD_CHUNKS = 0;
 
 
 void collabclient_CVPreserveStateCalled( CharViewBase *cv )
@@ -73,6 +77,8 @@ int collabclient_inSession( CharViewBase *cv )
     if( !cv->fv )
 	return 0;
     cloneclient_t* cc = cv->fv->collabClient;
+    if( cc && cc->sessionIsClosing )
+	return 0;
     return cc!=0;
 
 #endif
@@ -86,6 +92,8 @@ int collabclient_inSessionFV( FontViewBase* fv )
     if( !fv )
 	return 0;
     cloneclient_t* cc = fv->collabClient;
+    if( cc && cc->sessionIsClosing )
+	return 0;
     return cc!=0;
 
 #endif
@@ -110,7 +118,7 @@ collabclient_getState( FontViewBase* fv )
 #endif
 }
 
-char*
+const char*
 collabclient_stateToString( enum collabState_t s )
 {
     switch( s )
@@ -123,8 +131,9 @@ collabclient_stateToString( enum collabState_t s )
 	return _("Collab Server");
     case cs_client:
 	return _("Collab Client");
+    default:
+        return _("Unknown Collab State!");
     }
-    return _("Unknown Collab State!");
 }
 
 

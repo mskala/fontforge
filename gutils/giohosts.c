@@ -46,7 +46,7 @@ char *_GIO_decomposeURL(const unichar_t *url,char **host, int *port, char **user
 	*host = NULL;
 return( cu_copy(url));
     }
-    cu_strncpy(proto,url,pt-url<sizeof(proto)?pt-url:sizeof(proto));
+    cu_strncpy(proto,url,(size_t)(pt-url)<sizeof(proto)?(size_t)(pt-url):sizeof(proto));
     pt += 3;
 
     pt2 = u_strchr(pt,'/');
@@ -196,7 +196,7 @@ return( NULL );
 return( NULL );
 	}
 	for ( i=0; he->h_addr_list[i]!=NULL; ++i );
-	memcpy(&cur->addr.sin_addr,he->h_addr_list[rand()%i],he->h_length);
+	memcpy(&cur->addr.sin_addr,he->h_addr_list[rand()%(i+1)],he->h_length);
     }
     cur->hostname = copy(host);
     cur->next = *base;

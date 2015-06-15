@@ -24,6 +24,8 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include <fontforge-config.h>
+
 #include "fontforgevw.h"
 #include "ustring.h"
 #include "gfile.h"
@@ -35,6 +37,7 @@
 #include <string.h>
 #include "psfont.h"
 #include "savefont.h"
+#include "cvundoes.h"
 
 int old_sfnt_flags = ttf_flag_otmode;
 int old_ps_flags = ps_flag_afm|ps_flag_round;
@@ -43,14 +46,14 @@ int old_psotb_flags = ps_flag_afm;
 int oldformatstate = ff_pfb;
 int oldbitmapstate = 0;
 #if __Mac
-char *savefont_extensions[] = { ".pfa", ".pfb", ".res", "%s.pfb", ".pfa", ".pfb", ".pt3", ".ps",
+const char *savefont_extensions[] = { ".pfa", ".pfb", ".res", "%s.pfb", ".pfa", ".pfb", ".pt3", ".ps",
 	".cid", ".cff", ".cid.cff",
 	".t42", ".t11",
 	".ttf", ".ttf", ".suit", ".ttc", ".dfont", ".otf", ".otf.dfont", ".otf",
 	".otf.dfont", ".svg", ".ufo", ".woff", NULL };
-char *bitmapextensions[] = { "-*.bdf", ".ttf", ".dfont", ".ttf", ".otb", ".bmap", ".dfont", ".fon", "-*.fnt", ".pdb", "-*.pt3", ".none", NULL };
+const char *bitmapextensions[] = { "-*.bdf", ".ttf", ".dfont", ".ttf", ".otb", ".bmap", ".dfont", ".fon", "-*.fnt", ".pdb", "-*.pt3", ".none", NULL };
 #else
-char *savefont_extensions[] = { ".pfa", ".pfb", ".bin", "%s.pfb", ".pfa", ".pfb", ".pt3", ".ps",
+const char *savefont_extensions[] = { ".pfa", ".pfb", ".bin", "%s.pfb", ".pfa", ".pfb", ".pt3", ".ps",
 	".cid", ".cff", ".cid.cff",
 	".t42", ".t11",
 	".ttf", ".ttf", ".ttf.bin", ".ttc", ".dfont", ".otf", ".otf.dfont", ".otf",
@@ -58,7 +61,7 @@ char *savefont_extensions[] = { ".pfa", ".pfb", ".bin", "%s.pfb", ".pfa", ".pfb"
 	".ufo",
 	".woff",
 NULL };
-char *bitmapextensions[] = { "-*.bdf", ".ttf", ".dfont", ".ttf", ".otb", ".bmap.bin", ".fon", "-*.fnt", ".pdb", "-*.pt3", ".none", NULL };
+const char *bitmapextensions[] = { "-*.bdf", ".ttf", ".dfont", ".ttf", ".otb", ".bmap.bin", ".fon", "-*.fnt", ".pdb", "-*.pt3", ".none", NULL };
 #endif
 
 static int WriteAfmFile(char *filename,SplineFont *sf, int formattype,
@@ -145,12 +148,12 @@ return( false );
 return( ret );
 }
 
-static int WriteTfmFile(char *filename,SplineFont *sf, int formattype, EncMap *map,int layer) {
+static int WriteTfmFile(char *filename,SplineFont *sf, EncMap *map,int layer) {
     char *buf = malloc(strlen(filename)+6), *pt, *pt2;
     FILE *tfm, *enc;
     int ret;
     int i;
-    char *encname;
+    const char *encname;
 
     strcpy(buf,filename);
     pt = strrchr(buf,'.');
@@ -166,7 +169,7 @@ static int WriteTfmFile(char *filename,SplineFont *sf, int formattype, EncMap *m
     tfm = fopen(buf,"wb");
     if ( tfm==NULL )
 return( false );
-    ret = TfmSplineFont(tfm,sf,formattype,map,layer);
+    ret = TfmSplineFont(tfm,sf,map,layer);
     if ( fclose(tfm)==-1 )
 	ret = 0;
 
@@ -207,13 +210,13 @@ return( false );
 return( ret );
 }
 
-static int WriteOfmFile(char *filename,SplineFont *sf, int formattype, EncMap *map,int layer) {
+static int WriteOfmFile(char *filename,SplineFont *sf, EncMap *map,int layer) {
     char *buf = malloc(strlen(filename)+6), *pt, *pt2;
     FILE *tfm, *enc;
     int ret;
     int i;
-    char *encname;
-    char *texparamnames[] = { "SLANT", "SPACE", "STRETCH", "SHRINK", "XHEIGHT", "QUAD", "EXTRASPACE", NULL };
+    const char *encname;
+    const char *texparamnames[] = { "SLANT", "SPACE", "STRETCH", "SHRINK", "XHEIGHT", "QUAD", "EXTRASPACE", NULL };
 
     strcpy(buf,filename);
     pt = strrchr(buf,'.');
@@ -229,7 +232,7 @@ static int WriteOfmFile(char *filename,SplineFont *sf, int formattype, EncMap *m
     tfm = fopen(buf,"wb");
     if ( tfm==NULL )
 return( false );
-    ret = OfmSplineFont(tfm,sf,formattype,map,layer);
+    ret = OfmSplineFont(tfm,sf,map,layer);
     if ( fclose(tfm)==-1 )
 	ret = 0;
 
@@ -265,7 +268,7 @@ return( ret );
 #ifndef FONTFORGE_CONFIG_WRITE_PFM
 static
 #endif
-int WritePfmFile(char *filename,SplineFont *sf, int type0, EncMap *map,int layer) {
+int WritePfmFile(char *filename,SplineFont *sf, EncMap *map,int layer) {
     char *buf = malloc(strlen(filename)+6), *pt, *pt2;
     FILE *pfm;
     int ret;
@@ -283,14 +286,13 @@ int WritePfmFile(char *filename,SplineFont *sf, int type0, EncMap *map,int layer
     free(buf);
     if ( pfm==NULL )
 return( false );
-    ret = PfmSplineFont(pfm,sf,type0,map,layer);
+    ret = PfmSplineFont(pfm,sf,map,layer);
     if ( fclose(pfm)==-1 )
 return( 0 );
 return( ret );
 }
 
-static int WriteFontLog(char *filename,SplineFont *sf, int formattype,
-	EncMap *map, int flags, SplineFont *fullsf) {
+static int WriteFontLog(char *filename,SplineFont *sf) {
     char *buf = malloc(strlen(filename)+12), *pt;
     FILE *flog;
 
@@ -300,10 +302,10 @@ return( true );
     strcpy(buf,filename);
     pt = strrchr(buf,'/');
     if ( pt==NULL )
-	strcat(buf,"FontLog.txt");
+	strcat(buf,"FONTLOG.txt");
     else
-	strcpy(pt+1,"FontLog.txt");
-    flog = fopen(buf,"w");
+	strcpy(pt+1,"FONTLOG.txt");
+    flog = fopen(buf,"a"); // We changed this to append if the file exists.
     free(buf);
     if ( flog==NULL )
 return( false );
@@ -321,8 +323,7 @@ static int WriteBitmaps(char *filename,SplineFont *sf, int32 *sizes,int res,
     char *buf = malloc(strlen(filename)+30), *pt, *pt2;
     int i;
     BDFFont *bdf;
-    char *ext;
-    /* res = -1 => Guess depending on pixel size of font */
+    const char *ext;
 
     if ( sf->cidmaster!=NULL ) sf = sf->cidmaster;
 
@@ -379,7 +380,7 @@ static int32 *ParseWernerSFDFile(char *wernerfilename,SplineFont *sf,int *max,
     /* one entry for each char, >=1 => that subfont, 0=>not mapped, -1 => end of char mark */
     int cnt=0, subfilecnt=0, thusfar;
     int k, warned = false;
-    uint32 r1,r2,i,modi;
+    int r1,r2,i,modi;
     SplineFont *_sf;
     int32 *mapping;
     FILE *file;
@@ -478,7 +479,7 @@ return( NULL );
 		modi = i;
 		if ( map->remap!=NULL ) {
 		    for ( remap = map->remap; remap->infont!=-1; ++remap ) {
-			if ( i>=remap->firstenc && i<=remap->lastenc ) {
+			if ( i>=(int)remap->firstenc && i<=(int)remap->lastenc ) {
 			    modi = i-remap->firstenc + remap->infont;
 		    break;
 			}
@@ -518,8 +519,8 @@ return( NULL );
 return( mapping );
 }
 
-static int SaveSubFont(SplineFont *sf,char *newname,int32 *sizes,int res,
-	int32 *mapping, int subfont, char **names,EncMap *map,int layer) {
+static int SaveSubFont(SplineFont *sf,char *newname,
+	int32 *mapping, int subfont, char **names,int layer) {
     SplineFont temp;
     SplineChar *chars[256], **newchars;
     SplineFont *_sf;
@@ -657,7 +658,7 @@ return( 0 );
 	}
     }
     if ( !err && (old_ps_flags&ps_flag_tfm) ) {
-	if ( !WriteTfmFile(filename,&temp,oldformatstate,&encmap,layer)) {
+	if ( !WriteTfmFile(filename,&temp,&encmap,layer)) {
 	    ff_post_error(_("Tfm Save Failed"),_("Tfm Save Failed"));
 	    err = true;
 	}
@@ -690,7 +691,7 @@ return( err );
 
 /* ttf2tfm supports multiple sfd files. I do not. */
 static int WriteMultiplePSFont(SplineFont *sf,char *newname,int32 *sizes,
-	int res, char *wernerfilename,EncMap *map, int layer) {
+	char *wernerfilename,EncMap *map, int layer) {
     int err=0, tofree=false, max, filecnt;
     int32 *mapping;
     char *path;
@@ -721,11 +722,10 @@ return( 1 );
     ff_progress_start_indicator(10,_("Saving font"),
 	    _("Saving Multiple PostScript Fonts"),
 	    path,256,(max+1)*filecnt );
-    /*ff_progress_enable_stop(false);*/
     free(path);
 
     for ( i=0; i<=max && !err; ++i )
-	err = SaveSubFont(sf,newname,sizes,res,mapping,i,names,map,layer);
+	err = SaveSubFont(sf,newname,mapping,i,names,layer);
 
     free(mapping);
     for ( i=0; names[i]!=NULL; ++i ) free(names[i]);
@@ -766,9 +766,10 @@ int _DoSave(SplineFont *sf,char *newname,int32 *sizes,int res,
     int iscid = oldformatstate==ff_cid || oldformatstate==ff_cffcid ||
 	    oldformatstate==ff_otfcid || oldformatstate==ff_otfciddfont;
     int flags = 0;
+    int tmpstore = 0;
 
     if ( oldformatstate == ff_multiple )
-return( WriteMultiplePSFont(sf,newname,sizes,res,subfontdefinition,map,layer));
+return( WriteMultiplePSFont(sf,newname,sizes,subfontdefinition,map,layer));
 
     if ( oldformatstate<=ff_cffcid )
 	flags = old_ps_flags;
@@ -837,7 +838,13 @@ return( true );
 	    oerr = !WriteSVGFont(newname,sf,oldformatstate,flags,map,layer);
 	  break;
 	  case ff_ufo:
+	    tmpstore = sf->preferred_kerning; // We toggle this flag in order to force native kerning output.
+	    if (flags & ttf_native_kern) sf->preferred_kerning = 1; // 1 flags native kerning.
+	    sf->preferred_kerning |= 4; // 4 flags old-style naming for the starting name in UFONameKerningClasses.
 	    oerr = !WriteUFOFont(newname,sf,oldformatstate,flags,map,layer);
+	    if (flags & ttf_native_kern) sf->preferred_kerning = tmpstore;
+	  break;
+	  default:
 	  break;
 	}
 	if ( oerr ) {
@@ -846,13 +853,13 @@ return( true );
 	}
     }
     if ( !err && (flags&ps_flag_tfm) ) {
-	if ( !WriteTfmFile(newname,sf,oldformatstate,map,layer)) {
+	if ( !WriteTfmFile(newname,sf,map,layer)) {
 	    ff_post_error(_("Tfm Save Failed"),_("Tfm Save Failed"));
 	    err = true;
 	}
     }
     if ( !err && (flags&ttf_flag_ofm) ) {
-	if ( !WriteOfmFile(newname,sf,oldformatstate,map,layer)) {
+	if ( !WriteOfmFile(newname,sf,map,layer)) {
 	    ff_post_error(_("Ofm Save Failed"),_("Ofm Save Failed"));
 	    err = true;
 	}
@@ -865,8 +872,7 @@ return( true );
 	}
     }
     if ( !err && (flags&ps_flag_outputfontlog) ) {
-	/*ff_progress_increment(-sf->glyphcnt);*/
-	if ( !WriteFontLog(newname,sf,oldformatstate,map,flags,NULL)) {
+	if ( !WriteFontLog(newname,sf)) {
 	    ff_post_error(_("FontLog Save Failed"),_("FontLog Save Failed"));
 	    err = true;
 	}
@@ -874,7 +880,7 @@ return( true );
     if ( !err && (flags&ps_flag_pfm) && !iscid ) {
 	ff_progress_change_line1(_("Saving PFM File"));
 	ff_progress_increment(-sf->glyphcnt);
-	if ( !WritePfmFile(newname,sf,oldformatstate==ff_ptype0,map,layer)) {
+	if ( !WritePfmFile(newname,sf,map,layer)) {
 	    ff_post_error(_("Pfm Save Failed"),_("Pfm Save Failed"));
 	    err = true;
 	}
@@ -925,11 +931,10 @@ return( true );
 return( err );
 }
 
-void PrepareUnlinkRmOvrlp(SplineFont *sf,char *filename,int layer) {
+void PrepareUnlinkRmOvrlp(SplineFont *sf,const char *filename,int layer) {
     int gid;
     SplineChar *sc;
     RefChar *ref, *refnext;
-    extern int no_windowing_ui, maxundoes;
     int old_nwui = no_windowing_ui, old_maxundoes = maxundoes;
 
 #if !defined(_NO_PYTHON)
@@ -951,7 +956,10 @@ void PrepareUnlinkRmOvrlp(SplineFont *sf,char *filename,int layer) {
 	    refnext = ref->next;
 	    SCRefToSplines(sc,ref,layer);
 	}
+#if 0
+	// We await testing on the necessity of this operation.
 	SCRoundToCluster(sc,layer,false,.03,.12);
+#endif // 0
 	sc->layers[layer].splines = SplineSetRemoveOverlap(sc,sc->layers[layer].splines,over_remove);
 	no_windowing_ui = false;
 	if ( !sc->manualhints )
@@ -961,7 +969,7 @@ void PrepareUnlinkRmOvrlp(SplineFont *sf,char *filename,int layer) {
     maxundoes = old_maxundoes;
 }
 
-void RestoreUnlinkRmOvrlp(SplineFont *sf,char *filename,int layer) {
+void RestoreUnlinkRmOvrlp(SplineFont *sf,const char *filename,int layer) {
     int gid;
     SplineChar *sc;
 
@@ -995,11 +1003,11 @@ static int32 *AllBitmapSizes(SplineFont *sf) {
 return( sizes );
 }
 
-int GenerateScript(SplineFont *sf,char *filename,char *bitmaptype, int fmflags,
+int GenerateScript(SplineFont *sf,char *filename,const char *bitmaptype, int fmflags,
 	int res, char *subfontdefinition, struct sflist *sfs,EncMap *map,
 	NameList *rename_to,int layer) {
     int i;
-    static char *bitmaps[] = {"bdf", "ttf", "dfont", "ttf", "otb", "bin", "fon", "fnt", "pdb", "pt3", NULL };
+    static const char *bitmaps[] = {"bdf", "ttf", "dfont", "ttf", "otb", "bin", "fon", "fnt", "pdb", "pt3", NULL };
     int32 *sizes=NULL;
     char *end = filename+strlen(filename);
     struct sflist *sfi;
@@ -1023,7 +1031,7 @@ int GenerateScript(SplineFont *sf,char *filename,char *bitmaptype, int fmflags,
 
     for ( i=0; savefont_extensions[i]!=NULL; ++i ) {
 	if ( strlen( savefont_extensions[i])>0 &&
-		end-filename>=strlen(savefont_extensions[i]) &&
+             end-filename>=(ptrdiff_t)strlen(savefont_extensions[i]) &&
 		strmatch(end-strlen(savefont_extensions[i]),savefont_extensions[i])==0 )
     break;
     }
@@ -1051,7 +1059,7 @@ int GenerateScript(SplineFont *sf,char *filename,char *bitmaptype, int fmflags,
 	i = ff_multiple;
     if ( savefont_extensions[i]==NULL ) {
 	for ( i=0; bitmaps[i]!=NULL; ++i ) {
-	    if ( end-filename>strlen(bitmaps[i]) &&
+	    if ( end-filename>(ptrdiff_t)strlen(bitmaps[i]) &&
 		    strmatch(end-strlen(bitmaps[i]),bitmaps[i])==0 )
 	break;
 	}
@@ -1130,6 +1138,8 @@ int GenerateScript(SplineFont *sf,char *filename,char *bitmaptype, int fmflags,
 		  case 0x00:
 		    old_sfnt_flags |= ttf_flag_otmode;
 		  break;
+		  default:
+		  break;
 		}
 		if ( fmflags&4 ) old_sfnt_flags |= ttf_flag_shortps;
 		if ( fmflags&0x20 ) old_sfnt_flags |= ttf_flag_pfed_comments;
@@ -1138,12 +1148,12 @@ int GenerateScript(SplineFont *sf,char *filename,char *bitmaptype, int fmflags,
 		if ( fmflags&0x400 ) old_sfnt_flags |= ttf_flag_ofm;
 		if ( (fmflags&0x800) && !(old_sfnt_flags&ttf_flag_applemode) )
 		    old_sfnt_flags |= ttf_flag_oldkern;
-		if ( fmflags&0x1000 ) old_sfnt_flags |= ttf_flag_brokensize;
 		if ( fmflags&0x2000 ) old_sfnt_flags |= ttf_flag_symbol;
 		if ( fmflags&0x4000 ) old_sfnt_flags |= ttf_flag_dummyDSIG;
 		if ( fmflags&0x800000 ) old_sfnt_flags |= ttf_flag_pfed_lookupnames;
 		if ( fmflags&0x1000000 ) old_sfnt_flags |= ttf_flag_pfed_guides;
 		if ( fmflags&0x2000000 ) old_sfnt_flags |= ttf_flag_pfed_layers;
+		if ( fmflags&0x4000000 ) old_sfnt_flags |= ttf_flag_oldkernmappedonly;
 	    }
 	} else {
 	    old_sfnt_flags = 0;
@@ -1169,6 +1179,8 @@ int GenerateScript(SplineFont *sf,char *filename,char *bitmaptype, int fmflags,
 	      case 0x00:
 		old_sfnt_flags |= ttf_flag_otmode;
 	      break;
+              default:
+	      break;
 	    }
 	    if ( fmflags&4 ) old_sfnt_flags |= ttf_flag_shortps;
 	    if ( fmflags&8 ) old_sfnt_flags |= ttf_flag_nohints;
@@ -1179,12 +1191,12 @@ int GenerateScript(SplineFont *sf,char *filename,char *bitmaptype, int fmflags,
 	    if ( fmflags&0x400 ) old_sfnt_flags |= ttf_flag_ofm;
 	    if ( (fmflags&0x800) && !(old_sfnt_flags&ttf_flag_applemode) )
 		old_sfnt_flags |= ttf_flag_oldkern;
-	    if ( fmflags&0x1000 ) old_sfnt_flags |= ttf_flag_brokensize;
 	    if ( fmflags&0x2000 ) old_sfnt_flags |= ttf_flag_symbol;
 	    if ( fmflags&0x4000 ) old_sfnt_flags |= ttf_flag_dummyDSIG;
 	    if ( fmflags&0x800000 ) old_sfnt_flags |= ttf_flag_pfed_lookupnames;
 	    if ( fmflags&0x1000000 ) old_sfnt_flags |= ttf_flag_pfed_guides;
 	    if ( fmflags&0x2000000 ) old_sfnt_flags |= ttf_flag_pfed_layers;
+	    if ( fmflags&0x4000000 ) old_sfnt_flags |= ttf_flag_oldkernmappedonly;
 	}
     }
 

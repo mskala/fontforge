@@ -1,3 +1,4 @@
+#include "fontforge-config.h"
 #include <Python.h>
 
 #if PY_MAJOR_VERSION >= 3
@@ -18,6 +19,6 @@ PyMODINIT_FUNC PyInit_psMat(void) {
 /* Python 2 module initialization */
 PyMODINIT_FUNC initpsMat(void);
 PyMODINIT_FUNC initpsMat(void) {
-    return FFPY_PYTHON_ENTRY_FUNCTION("psMat");
+    FFPY_PYTHON_ENTRY_FUNCTION("psMat");
 }
 #endif

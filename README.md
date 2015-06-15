@@ -1,9 +1,16 @@
-fontforge
-=========
+# FontForge [![Build Status](https://travis-ci.org/fontforge/fontforge.png)](https://travis-ci.org/fontforge/fontforge) [![Coverity Scan Build Status](https://scan.coverity.com/projects/792/badge.svg?flat=1)](https://scan.coverity.com/projects/792)
 
-A font editor.
+![FontForge Logo](http://fontforge.github.io/assets/img/logo-transparent.png)
 
-Old site at fontforge.org, new site at [fontforge.github.io](http://fontforge.github.io)
+FontForge is a free (libre) font editor for Windows, Mac OS X and GNU+Linux. 
+Use it to create, edit and convert fonts in OpenType, TrueType, UFO, CID-keyed, Multiple Master, and many other formats.
 
+[fontforge.org](http://fontforge.org) &mdash; homepage
 
-[![Build Status](https://travis-ci.org/fontforge/fontforge.png)](https://travis-ci.org/fontforge/fontforge)
+[designwithfontforge.com](http://designwithfontforge.com) &mdash; font creation manual
+
+[`INSTALL-git.md`](INSTALL-git.md) &mdash; developer instructions to build from source
+
+[`.travis.yml`](.travis.yml) &mdash; a list of installation dependencies
+
+[`CONTRIBUTING.md`](CONTRIBUTING.md) &mdash; contributing guidelines

@@ -313,10 +313,10 @@ static uint16 *getClassDefTable(FILE *ttf, int classdef_offset, struct ttfinfo *
     uint32 g_bounds = info->g_bounds;
 
     fseek(ttf, classdef_offset, SEEK_SET);
-    glist = calloc(cnt,sizeof(uint16));	/* Class 0 is default */
     format = getushort(ttf);
     if ( format==1 ) {
 	start = getushort(ttf);
+	glist = calloc(start+cnt,sizeof(uint16));
 	glyphcnt = getushort(ttf);
 	if ( start+(int) glyphcnt>cnt ) {
 	    LogError( _("Bad class def table. start=%d cnt=%d, max glyph=%d\n"), start, glyphcnt, cnt );
@@ -330,6 +330,7 @@ static uint16 *getClassDefTable(FILE *ttf, int classdef_offset, struct ttfinfo *
 	for ( i=0; i<glyphcnt; ++i )
 	    glist[start+i] = getushort(ttf);
     } else if ( format==2 ) {
+    	glist = calloc(cnt,sizeof(uint16));
 	rangecnt = getushort(ttf);
 	if ( ftell(ttf)+6*rangecnt > g_bounds ) {
 	    LogError( _("Class definition sub-table extends beyond end of table\n") );
@@ -348,6 +349,7 @@ static uint16 *getClassDefTable(FILE *ttf, int classdef_offset, struct ttfinfo *
 		glist[j] = class;
 	}
     } else {
+    	glist = calloc(cnt,sizeof(uint16));	/* Class 0 is default */
 	LogError( _("Unknown class table format: %d\n"), format );
 	info->bad_ot = true;
 	/* Put everything in class 0 and return that */
@@ -449,7 +451,7 @@ return( ret );
 }
 
 static void addPairPos(struct ttfinfo *info, int glyph1, int glyph2,
-	struct lookup *l, struct lookup_subtable *subtable, struct valuerecord *vr1,struct valuerecord *vr2,
+	struct lookup_subtable *subtable, struct valuerecord *vr1,struct valuerecord *vr2,
 	uint32 base,FILE *ttf) {
     
     if ( glyph1<info->glyph_cnt && glyph2<info->glyph_cnt &&
@@ -479,7 +481,7 @@ static void addPairPos(struct ttfinfo *info, int glyph1, int glyph2,
 }
 
 static int addKernPair(struct ttfinfo *info, int glyph1, int glyph2,
-	int16 offset, uint32 devtab, struct lookup *l, struct lookup_subtable *subtable,int isv,
+	int16 offset, uint32 devtab, struct lookup_subtable *subtable,int isv,
 	FILE *ttf) {
     KernPair *kp;
     if ( glyph1<info->glyph_cnt && glyph2<info->glyph_cnt &&
@@ -565,25 +567,25 @@ return;
 		readvaluerecord(&vr1,vf1,ttf);
 		readvaluerecord(&vr2,vf2,ttf);
 		if ( isv==2 )
-		    addPairPos(info, glyphs[i], glyph2,l,subtable,&vr1,&vr2, stoffset,ttf);
+		    addPairPos(info, glyphs[i], glyph2,subtable,&vr1,&vr2, stoffset,ttf);
 		else if ( isv ) {
 		    if ( addKernPair(info, glyphs[i], glyph2, vr1.yadvance,
 			    vr1.offYadvanceDev==0?0:stoffset+vr1.offYadvanceDev,
-			    l,subtable,isv,ttf))
-			addPairPos(info, glyphs[i], glyph2,l,subtable,&vr1,&vr2, stoffset,ttf);
+			    subtable,isv,ttf))
+			addPairPos(info, glyphs[i], glyph2,subtable,&vr1,&vr2, stoffset,ttf);
 			/* If we've already got kern data for this pair of */
 			/*  glyphs, then we can't make it be a true KernPair */
 			/*  but we can save the info as a pst_pair */
 		} else if ( r2l ) {	/* R2L */
 		    if ( addKernPair(info, glyphs[i], glyph2, vr2.xadvance,
 			    vr2.offXadvanceDev==0?0:stoffset+vr2.offXadvanceDev,
-			    l,subtable,isv,ttf))
-			addPairPos(info, glyphs[i], glyph2,l,subtable,&vr1,&vr2,stoffset,ttf);
+			    subtable,isv,ttf))
+			addPairPos(info, glyphs[i], glyph2,subtable,&vr1,&vr2,stoffset,ttf);
 		} else {
 		    if ( addKernPair(info, glyphs[i], glyph2, vr1.xadvance,
 			    vr1.offXadvanceDev==0?0:stoffset+vr1.offXadvanceDev,
-			    l,subtable,isv,ttf))
-			addPairPos(info, glyphs[i], glyph2,l,subtable,&vr1,&vr2,stoffset,ttf);
+			    subtable,isv,ttf))
+			addPairPos(info, glyphs[i], glyph2,subtable,&vr1,&vr2,stoffset,ttf);
 		}
 	    }
 	}
@@ -664,7 +666,7 @@ return;
 			    if ( class1[k]==i )
 				for ( m=0; m<info->glyph_cnt; ++m )
 				    if ( class2[m]==j )
-					addPairPos(info, k,m,l,subtable,&vr1,&vr2,stoffset,ttf);
+					addPairPos(info, k,m,subtable,&vr1,&vr2,stoffset,ttf);
 		}
 	    }
 	}
@@ -706,7 +708,7 @@ static AnchorPoint *readAnchorPoint(FILE *ttf,uint32 base,AnchorClass *class,
 return( ap );
 }
 
-static void gposCursiveSubTable(FILE *ttf, int stoffset, struct ttfinfo *info,struct lookup *l, struct lookup_subtable *subtable) {
+static void gposCursiveSubTable(FILE *ttf, int stoffset, struct ttfinfo *info,struct lookup_subtable *subtable) {
     int coverage, cnt, format, i;
     struct ee_offsets { int entry, exit; } *offsets;
     uint16 *glyphs;
@@ -1984,7 +1986,11 @@ return;
 			if ( *pt!='\0' && pt[strlen(pt)-1]==' ' )
 			pt[strlen(pt)-1] = '\0';
 		}
-		if (info->chars[glyphs[i]]->possub->u.subs.variant == NULL) {
+		if (glyphs[i] > info->glyph_cnt) {
+		        fprintf(stderr, "This glyph is out of bounds.\n");
+		} else if (info->chars[glyphs[i]] == NULL || info->chars[glyphs[i]]->possub == NULL) {
+		        if (justinuse != git_justinuse) fprintf( stderr , "This glyph isn't loaded yet.\n" );
+		} else if (info->chars[glyphs[i]]->possub->u.subs.variant == NULL) {
 			fprintf( stderr , "info->chars[glyphs[%d]]->possub->u.subs.variant is null. glyphs[%d] = %d. info->chars[%d]->name = \"%s\".\n" , i , i , glyphs[i] , glyphs[i] , info->chars[glyphs[i]]->name ) ;
 		}
     }
@@ -2676,7 +2682,7 @@ static void gposExtensionSubTable(FILE *ttf, int stoffset,
 	gposKernSubTable(ttf,st,info,l,subtable);
       break;  
       case 3:
-	gposCursiveSubTable(ttf,st,info,l,subtable);
+	gposCursiveSubTable(ttf,st,info,subtable);
       break;
       case 4: case 5: case 6:
 	gposMarkSubTable(ttf,st,info,l,subtable);
@@ -2763,7 +2769,7 @@ static void gposLookupSwitch(FILE *ttf, int st,
 	gposKernSubTable(ttf,st,info,l,subtable);
       break;  
       case gpos_cursive:
-	gposCursiveSubTable(ttf,st,info,l,subtable);
+	gposCursiveSubTable(ttf,st,info,subtable);
       break;
       case gpos_mark2base: case gpos_mark2ligature: case gpos_mark2mark:
 	gposMarkSubTable(ttf,st,info,l,subtable);
@@ -5605,8 +5611,8 @@ return;
 		}
 		free(ls);
 	    }
+	    free(bs);
 	}
-	free(bs);
     }
 }
 

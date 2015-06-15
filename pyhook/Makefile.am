@@ -29,15 +29,21 @@ pyexec_LTLIBRARIES = psMat.la fontforge.la
 
 psMat_la_SOURCES = psMatpyhook.c
 psMat_la_LIBADD = $(LIBADD)
+psMat_la_LDFLAGS = $(MY_LIB_LDFLAGS) -module -shared -avoid-version \
+                   $(PYHOOK_FILE_EXTENSION)
 
 fontforge_la_SOURCES = fontforgepyhook.c
 fontforge_la_LIBADD = $(LIBADD)
+fontforge_la_LDFLAGS = $(MY_LIB_LDFLAGS) -module -shared -avoid-version \
+                       $(PYHOOK_FILE_EXTENSION)
+
+AM_CFLAGS = $(WARN_CFLAGS)
 
 AM_CPPFLAGS = -DLIBDIR='"$(libdir)"' $(PYTHON_CFLAGS)			\
-	"-I$(top_builddir)/inc" "-I$(top_srcdir)/inc"				\
+	"-I$(top_builddir)/inc" "-I$(top_srcdir)/inc"			\
+	"-I$(top_builddir)/lib" "-I$(top_srcdir)/lib"			\
 	"-I$(top_builddir)/fontforge" "-I$(top_srcdir)/fontforge"	\
 	$(MY_CFLAGS)
-AM_LDFLAGS = -module -shared -avoid-version
 
 LIBADD = $(top_builddir)/Unicode/libgunicode.la	\
 	$(top_builddir)/gutils/libgutils.la			\
@@ -45,3 +51,7 @@ LIBADD = $(top_builddir)/Unicode/libgunicode.la	\
 	$(top_builddir)/fontforge/libfontforge.la
 
 -include $(top_srcdir)/git.mk
+
+install-exec-local:
+	@ sfff=`(pyff_count=0 ; for item in \`echo -e "import sys\nfor file in sys.path:\n\tprint \"%s\" %file\n" | python\` ; do if [ -e "$$item"/fontforge.so ] ; then echo "$$item"/fontforge.so ; pyff_count=\`expr $$pyff_count + 1\`; fi ; done ;) | grep -v '^$(DESTDIR)$(pyexecdir)' | grep -v '^$(pyexecdir)'`; if [ "$$sfff" != "" ]; then echo "There may be another FontForge Python library on this system."; echo "$$sfff"; fi;
+

@@ -27,17 +27,17 @@
 #ifndef _FILEUTIL_H
 #define _FILEUTIL_H
 
-extern char *GFileGetAbsoluteName(char *name, char *result, int rsiz);
-extern char *GFileBuildName(char *dir,char *fname,char *buffer,int size);
-extern char *GFileReplaceName(char *oldname,char *fname,char *buffer,int size);
+extern char *GFileGetAbsoluteName(const char *name, char *result, size_t rsiz);
+extern char *GFileBuildName(char *dir,char *fname,char *buffer,size_t size);
+extern char *GFileReplaceName(char *oldname,char *fname,char *buffer,size_t size);
 extern char *GFileNameTail(const char *oldname);
 extern int GFileIsDir(const char *file);
 extern int GFileExists(const char *file);
 extern int GFileModifyable(const char *file);
 extern int GFileModifyableDir(const char *file);
-extern int GFileReadable(char *file);
-extern int GFileMkDir(char *name);
-extern int GFileRmDir(char *name);
-extern int GFileUnlink(char *name);
+extern int GFileReadable(const char *file);
+extern int GFileMkDir(const char *name);
+extern int GFileRmDir(const char *name);
+extern int GFileUnlink(const char *name);
 
 #endif

@@ -73,7 +73,7 @@ return;
 	    struct _GImage *base = e->u.image.image->list_len==0?
 		    e->u.image.image->u.image:e->u.image.image->u.images[0];
 	    sc->layers[pos].images = ilist;
-	    sc->layers[pos].dofill = base->image_type==it_mono && base->trans!=-1;
+	    sc->layers[pos].dofill = base->image_type==it_mono && base->trans!=(Color)-1;
 	    sc->layers[pos].fill_brush.col = e->u.image.col==0xffffffff ?
 		    COLOR_INHERITED : e->u.image.col;
 	    ilist->image = e->u.image.image;
@@ -189,7 +189,7 @@ return;
     fclose(pdf);
 }
 
-void SCImportPlateFile(SplineChar *sc,int layer,FILE *plate,int doclear,int flags) {
+void SCImportPlateFile(SplineChar *sc,int layer,FILE *plate,int doclear) {
     SplineSet **ly_head, *head, *cur, *last;
     spiro_cp *spiros=NULL;
     int cnt=0, max=0, ch;
@@ -293,7 +293,6 @@ return;
     SCCharChangedUpdate(sc,layer);
 }
 
-#ifndef _NO_LIBXML
 void SCImportSVG(SplineChar *sc,int layer,char *path,char *memory, int memlen, int doclear) {
     SplinePointList *spl, *espl, **head;
 
@@ -357,7 +356,6 @@ return;
 
     SCCharChangedUpdate(sc,layer);
 }
-#endif
 
 /**************************** Fig File Import *********************************/
 
@@ -376,7 +374,7 @@ static BasePoint *slurppoints(FILE *fig,SplineFont *sf,int cnt ) {
 return( bps );
 }
 
-static SplineSet *slurpcolor(FILE *fig,SplineChar *sc, SplineSet *sofar) {
+static SplineSet *slurpcolor(FILE *fig,SplineSet *sofar) {
     int ch;
     while ((ch=getc(fig))!='\n' && ch!=EOF);
 return( sofar );
@@ -400,8 +398,8 @@ static SplinePoint *ArcSpline(SplinePoint *sp,float sa,SplinePoint *ep,float ea,
 
     ss = sin(sa); sc = cos(sa); es = sin(ea); ec = cos(ea);
     if ( ep==NULL )
-	ep = SplinePointCreate(cx+r*ec, cy+r*es);
-    len = ((ea-sa)/(3.1415926535897932/2)) * r * .552;
+	ep = SplinePointCreate((double)(cx+r)*ec, (double)(cy+r)*es);
+    len = ((double)(ea-sa)/(3.1415926535897932/2)) * (double)r * .552;
 
     sp->nextcp.x = sp->me.x - len*ss; sp->nextcp.y = sp->me.y + len*sc;
     ep->prevcp.x = ep->me.x + len*es; ep->prevcp.y = ep->me.y - len*ec;
@@ -429,7 +427,7 @@ static SplineSet * slurparc(FILE *fig,SplineChar *sc, SplineSet *sofar) {
 	while ((ch=getc(fig))!='\n' && ch!=EOF);
     if ( ba )
 	while ((ch=getc(fig))!='\n' && ch!=EOF);
-    sx = _sx*scale; sy = (ascent-_sy)*scale; ex = _ex*scale; ey=(ascent-_ey)*scale; cx*=scale; cy=(ascent-cy)*scale;
+    sx = _sx*scale; sy = (ascent-_sy)*scale; ex = _ex*scale; ey=(ascent-_ey)*scale; cx=(double)cx*scale; cy=(ascent-(double)cy)*scale;
     r = sqrt( (sx-cx)*(sx-cx) + (sy-cy)*(sy-cy) );
     sa = atan2(sy-cy,sx-cx);
     ea = atan2(ey-cy,ex-cx);
@@ -440,23 +438,23 @@ static SplineSet * slurparc(FILE *fig,SplineChar *sc, SplineSet *sofar) {
     spl->last = ep = SplinePointCreate(ex,ey);
 
     if ( dir==0 ) {	/* clockwise */
-	if ( ea>sa ) ea -= 2*3.1415926535897932;
-	ma=ceil(sa/(3.1415926535897932/2)-1)*(3.1415926535897932/2);
-	if ( RealNearish( sa,ma )) ma -= (3.1415926535897932/2);
+	if ( ea>sa ) ea = (double)ea - 2*3.1415926535897932;
+	ma=ceil((double)sa/(3.1415926535897932/2)-1)*(3.1415926535897932/2);
+	if ( RealNearish( sa,ma )) ma = (double)ma - (3.1415926535897932/2);
 	while ( ma > ea ) {
 	    sp = ArcSpline(sp,sa,NULL,ma,cx,cy,r);
 	    sa = ma;
-	    ma -= (3.1415926535897932/2);
+	    ma = (double)ma - (3.1415926535897932/2);
 	}
 	sp = ArcSpline(sp,sa,ep,ea,cx,cy,r);
     } else {		/* counterclockwise */
-	if ( ea<sa ) ea += 2*3.1415926535897932;
-	ma=floor(sa/(3.1415926535897932/2)+1)*(3.1415926535897932/2);
-	if ( RealNearish( sa,ma )) ma += (3.1415926535897932/2);
+	if ( ea<sa ) ea = (double)ea + 2*3.1415926535897932;
+	ma=floor((double)sa/(3.1415926535897932/2)+1)*(3.1415926535897932/2);
+	if ( RealNearish( sa,ma )) ma = (double)ma + (3.1415926535897932/2);
 	while ( ma < ea ) {
 	    sp = ArcSpline(sp,sa,NULL,ma,cx,cy,r);
 	    sa = ma;
-	    ma += (3.1415926535897932/2);
+	    ma = (double)ma + (3.1415926535897932/2);
 	}
 	sp = ArcSpline(sp,sa,ep,ea,cx,cy,r);
     }
@@ -698,7 +696,7 @@ static void AdjustTs(TPoint *mids,SplinePoint *from, SplinePoint *to) {
 }
 
 static SplineSet *ApproximateXSpline(struct xspline *xs,int order2) {
-    int i, j;
+    size_t i, j;
     real t;
     TPoint mids[7];
     SplineSet *spl = chunkalloc(sizeof(SplineSet));
@@ -707,8 +705,8 @@ static SplineSet *ApproximateXSpline(struct xspline *xs,int order2) {
     spl->first = spl->last = chunkalloc(sizeof(SplinePoint));
     xsplineeval(&spl->first->me,0,xs);
     spl->first->pointtype = ( xs->s[0]==0 )?pt_corner:pt_curve;
-    for ( i=0; i<xs->n-1; ++i ) {
-	if ( i==xs->n-2 && xs->closed )
+    for ( i=0; i<(size_t)(xs->n-1); ++i ) {
+	if ( i==(size_t)(xs->n-2) && xs->closed )
 	    sp = spl->first;
 	else {
 	    sp = chunkalloc(sizeof(SplinePoint));
@@ -788,7 +786,7 @@ return(sofar);
 	    sofar = slurpcompound(fig,sc,sofar);
 	  break;
 	  case 0:
-	    sofar = slurpcolor(fig,sc,sofar);
+	    sofar = slurpcolor(fig,sofar);
 	  break;
 	  case 1:
 	    sofar = slurpelipse(fig,sc,sofar);
@@ -890,7 +888,7 @@ return( image );
 	    clut->clut[1] = 0xb0b0b0;
 	clut->trans_index = 1;
 	base->trans = 1;
-    } else if ( base->trans!=-1 ) {
+    } else if ( base->trans!=(Color)-1 ) {
 	clut->clut[!base->trans] = 0x808080;
     } else if ( clut->clut[0]<clut->clut[1] ) {
 	clut->clut[0] = 0x808080;
@@ -958,14 +956,12 @@ return(false);
 	    }
 	    ++tot;
 	    SCAddScaleImage(sc,image,true,toback?ly_back:ly_fore);
-#ifndef _NO_LIBXML
 	} else if ( format==fv_svg ) {
 	    SCImportSVG(sc,toback?ly_back:fv->active_layer,start,NULL,0,flags&sf_clearbeforeinput);
 	    ++tot;
 	} else if ( format==fv_glif ) {
 	    SCImportGlif(sc,toback?ly_back:fv->active_layer,start,NULL,0,flags&sf_clearbeforeinput);
 	    ++tot;
-#endif
 	} else if ( format==fv_eps ) {
 	    SCImportPS(sc,toback?ly_back:fv->active_layer,start,flags&sf_clearbeforeinput,flags&~sf_clearbeforeinput);
 	    ++tot;
@@ -993,7 +989,8 @@ int FVImportImageTemplate(FontViewBase *fv,char *path,int format,int toback, int
     GImage *image;
     struct _GImage *base;
     int tot;
-    char *ext, *name, *dirname, *pt, *end;
+    char *ext, *name, *pt, *end;
+    const char *dirname;
     int i, val;
     int isu=false, ise=false, isc=false;
     DIR *dir;
@@ -1071,14 +1068,12 @@ return( false );
 	    }
 	    ++tot;
 	    SCAddScaleImage(sc,image,true,toback?ly_back:ly_fore);
-#ifndef _NO_LIBXML
 	} else if ( format==fv_svgtemplate ) {
 	    SCImportSVG(sc,toback?ly_back:fv->active_layer,start,NULL,0,flags&sf_clearbeforeinput);
 	    ++tot;
 	} else if ( format==fv_gliftemplate ) {
 	    SCImportGlif(sc,toback?ly_back:fv->active_layer,start,NULL,0,flags&sf_clearbeforeinput);
 	    ++tot;
-#endif
 	} else if ( format==fv_pdftemplate ) {
 	    SCImportPDF(sc,toback?ly_back:fv->active_layer,start,flags&sf_clearbeforeinput,flags&~sf_clearbeforeinput);
 	    ++tot;

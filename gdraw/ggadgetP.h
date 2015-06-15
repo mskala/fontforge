@@ -232,6 +232,7 @@ typedef struct gscrollbar {		/* and slider */
     int8 repeatcmd;		/*  sb event to be generated on timer interupts (ie. upline)*/
     int8 thumbborder;		/* Size of the border of the thumbbox */
     int8 sbborder;		/* Size of the border of the main scrollbar */
+    int16 size_offset;		/* Thumb size offset when the thumb size gets clamped. */
     int16 thumboff;		/* Offset from where the thumb was pressed to top of thumb */
     int16 arrowsize;		
     int16 thumbsize;		/* Current thumb size, refigured after every call to setbounds */
@@ -578,7 +579,7 @@ extern int GMenuBarCheckKey(GWindow top, GGadget *g, GEvent *event);
 extern void _GButton_SetDefault(GGadget *g,int32 is_default);
 extern void _GButtonInit(void);
 extern void GListMarkDraw(GWindow pixmap,int x, int y, int height, enum gadget_state state );
-extern char **_GGadget_GetImagePath(void);
+extern const char* const* _GGadget_GetImagePath(void);
 extern int _GGadget_ImageInCache(GImage *image);
 
 extern int _ggadget_use_gettext;

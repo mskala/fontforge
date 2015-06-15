@@ -26,10 +26,12 @@
 
 include $(top_srcdir)/mk/layout.am
 
-FFAPP_FILES = $(wildcard *.nib)
-ffappdir = $(pkgdatadir)/osx/FontForge.app/Contents/MacOS/CocoaDialog.app/Contents/Resources/Msgbox.nib
-
-ffapp_DATA = $(FFAPP_FILES)
+FFAPP_FILES = classes.nib info.nib keyedobjects.nib
 EXTRA_DIST = $(FFAPP_FILES)
+
+if PLATFORM_OSX
+   ffappdir = $(pkgdatadir)/osx/FontForge.app/Contents/MacOS/CocoaDialog.app/Contents/Resources/Msgbox.nib
+   ffapp_DATA = $(FFAPP_FILES)
+endif
 
 -include $(top_srcdir)/git.mk

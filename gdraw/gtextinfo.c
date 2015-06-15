@@ -30,6 +30,7 @@
 #include "utype.h"
 #include "ustring.h"
 #include "gresource.h"
+#include "gresourceP.h"
 #include "hotkeys.h"
 #include "gkeysym.h"
 
@@ -285,9 +286,10 @@ GTextInfo *GTextInfoCopy(GTextInfo *ti) {
 return( copy);
 }
 
-static char *imagedir = "fontforge-pixmaps";	/* This is the system pixmap directory */
-static char **imagepath;			/* May contain user directories too */
-static int imagepathlenmax = 0;
+static const char *imagedir_default = "fontforge-pixmaps";
+static char *imagedir = NULL;	/* This is the system pixmap directory */
+static char **imagepath = NULL;			/* May contain user directories too */
+static size_t imagepathlenmax = 0;
 
 struct image_bucket {
     struct image_bucket *next;
@@ -298,8 +300,27 @@ struct image_bucket {
 #define IC_SIZE	127
 static struct image_bucket *imagecache[IC_SIZE];
 
-static int hash_filename(char *_pt ) {
-    unsigned char *pt = (unsigned char *) _pt;
+void InitImageCache() {
+  memset(imagecache, 0, IC_SIZE * sizeof(struct image_bucket *));
+}
+
+void ClearImageCache() {
+      for ( int i=0; i<IC_SIZE; ++i ) {
+        struct image_bucket * bucket;
+        struct image_bucket * nextbucket;
+	for ( bucket = imagecache[i]; bucket!=NULL; bucket=nextbucket ) {
+          nextbucket = bucket->next;
+          if (bucket->filename != NULL) { free(bucket->filename); bucket->filename = NULL; }
+          if (bucket->absname != NULL) { free(bucket->absname); bucket->absname = NULL; }
+          if (bucket->image != NULL) { GImageDestroy(bucket->image); bucket->image = NULL; }
+          free(bucket);
+        }
+        imagecache[i] = NULL;
+     }
+}
+
+static int hash_filename(const char *_pt ) {
+    const unsigned char *pt = (const unsigned char *) _pt;
     int val = 0;
 
     while ( *pt ) {
@@ -314,21 +335,22 @@ return( val%IC_SIZE );
 }
 
 static void ImagePathDefault(void) {
-    extern char *_GGadget_ImagePath;
-
     if ( imagepath==NULL ) {
 	imagepath = malloc(2*sizeof(void *));
-	imagepath[0] = copy(imagedir);
+	imagepath[0] = (imagedir == NULL) ? copy(imagedir_default) : copy(imagedir);
 	imagepath[1] = NULL;
-	imagepathlenmax = strlen(imagedir);
-	free(_GGadget_ImagePath);
+	imagepathlenmax = strlen(imagepath[0]);
+	if (_GGadget_ImagePath != NULL) free(_GGadget_ImagePath);
 	_GGadget_ImagePath = copy("=");
     }
 }
 
-char **_GGadget_GetImagePath(void) {
+/**
+ * \return The image path. The return value should not be freed or modified.
+ */
+const char* const* _GGadget_GetImagePath(void) {
     ImagePathDefault();
-return( imagepath );
+    return (const char* const*) imagepath;
 }
 
 int _GGadget_ImageInCache(GImage *image) {
@@ -347,7 +369,7 @@ static void ImageCacheReload(void) {
     int i,k;
     struct image_bucket *bucket;
     char *path=NULL;
-    int pathlen;
+    size_t pathlen;
     GImage *temp, hold;
 
     ImagePathDefault();
@@ -389,29 +411,43 @@ static void ImageCacheReload(void) {
 
 void GGadgetSetImageDir(char *dir) {
     int k;
-    extern char *_GGadget_ImagePath;
+    char *ptr = imagedir;
+    //Check if imagedir has been initialised
+    if (ptr == NULL) {
+        //We shall check later if ptr should be freed or not
+        ptr = (char*) imagedir_default;
+    }
+    
+    if (dir != NULL && strcmp(ptr,dir) != 0) {
+        imagedir = copy(dir);
+        if (imagepath != NULL) {
+            for (k=0; imagepath[k] != NULL; ++k) {
+                if (strcmp(imagepath[k],ptr) == 0) {
+                    break;
+                }
+            }
 
-    if ( dir!=NULL && strcmp(imagedir,dir)!=0 ) {
-	char *old = imagedir;
-	imagedir = copy( dir );
-	if ( imagepath!=NULL ) {
-	    for ( k=0; imagepath[k]!=NULL; ++k )
-		if ( strcmp(imagepath[k],old)==0 )
-	    break;
-	    if ( imagepath[k]!=NULL ) {
-		free(imagepath[k]);
-		imagepath[k] = imagedir;
-		ImageCacheReload();
-	    }
-	    free(_GGadget_ImagePath);
-	    _GGadget_ImagePath = copy("=");
-	}
+            if (ptr != imagedir_default) {
+                free(ptr);
+            }
+            if (imagepath[k] != NULL) {
+                free(imagepath[k]);
+                imagepath[k] = copy(imagedir);
+                ImageCacheReload();
+            }
+            if (_GGadget_ImagePath != NULL) free(_GGadget_ImagePath);
+            _GGadget_ImagePath = copy("=");
+        }
     }
 }
 
 static char *ImagePathFigureElement(char *start, int len) {
-    if ( *start=='=' && len==1 )
-return( imagedir );
+    if ( *start=='=' && len==1 ) {
+        if (imagedir == NULL) {
+            return copy(imagedir_default);
+        }
+        return copy(imagedir);
+    }
     else if ( *start=='~' && start[1]=='/' && len>=2 && getenv("HOME")!=NULL ) {
 	int hlen = strlen(getenv("HOME"));
 	char *absname = malloc( hlen+len+8 );
@@ -434,7 +470,7 @@ void GGadgetSetImagePath(char *path) {
 
     if ( path==NULL )
 return;
-    free( _GGadget_ImagePath );
+    if (_GGadget_ImagePath != NULL) free( _GGadget_ImagePath );
 
     if ( imagepath!=NULL ) {
 	for ( k=0; imagepath[k]!=NULL; ++k )
@@ -455,7 +491,7 @@ return;
     _GGadget_ImagePath = copy(path);
 }
 
-static GImage *_GGadgetImageCache(char *filename, char **foundname) {
+static GImage *_GGadgetImageCache(const char *filename, char **foundname) {
     int index = hash_filename(filename);
     struct image_bucket *bucket;
     char *path;
@@ -501,16 +537,16 @@ return( bucket->image );
     }
     if ( foundname!=NULL && bucket->image!=NULL )
 	*foundname = copy( bucket->absname );
-return( bucket->image );
+return(bucket->image);
 }
 
-GImage *GGadgetImageCache(char *filename) {
+GImage *GGadgetImageCache(const char *filename) {
 return( _GGadgetImageCache(filename,NULL));
 }
 
 /* Substitutes an image contents with what's found in cache. */
 /* That is, unless there is nothing found in the cache.      */
-int TryGGadgetImageCache(GImage *image, char *name) {
+int TryGGadgetImageCache(GImage *image, const char *name) {
     GImage *loaded = GGadgetImageCache(name);
     if (loaded != NULL) *image = *loaded;
 return (loaded != NULL);
@@ -642,6 +678,9 @@ return;
     free(ti);
 }
 
+/* The list is terminated with an empty entry. Not a NULL pointer, but 
+ * rather an empty entry terminates lists of GTextInfo entries.  (!)
+ */
 void GTextInfoArrayFree(GTextInfo **ti) {
     int i;
 

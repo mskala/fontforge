@@ -46,7 +46,9 @@ lib_LTLIBRARIES = libfontforgeexe.la
 #--------------------------------------------------------------------------
 
 macobjective.o: macobjective.m
-	clang -g -arch x86_64 -arch i386 -c "${srcdir}/macobjective.m" -o macobjective.o
+	clang -I../inc -I../osx/FontForge.app/Contents/Frameworks/Breakpad.framework/Headers \
+            -g -arch x86_64 -arch i386 \
+            -c "${srcdir}/macobjective.m" -o macobjective.o
 
 
 #--------------------------------------------------------------------------
@@ -75,7 +77,8 @@ sfddiff: sfddiff.pe
 LIBADD = $(top_builddir)/Unicode/libgunicode.la	\
 	$(top_builddir)/gutils/libgutils.la	\
 	$(top_builddir)/gutils/libgioftp.la	\
-	$(top_builddir)/fontforge/libfontforge.la
+	$(top_builddir)/fontforge/libfontforge.la \
+	$(top_builddir)/lib/libgnu.la
 
 GUILIBADD =
 if GRAPHICAL_USER_INTERFACE
@@ -85,7 +88,10 @@ endif GRAPHICAL_USER_INTERFACE
 
 LDADD = $(LIBADD) $(GUILIBADD)
 
+AM_CFLAGS = $(WARN_CFLAGS)
+
 AM_CPPFLAGS = "-I$(top_builddir)/inc" "-I$(top_srcdir)/inc"	\
+	"-I$(top_builddir)/lib" "-I$(top_srcdir)/lib"			\
               "-I$(top_srcdir)/fontforge" \
 	"-DSHAREDIR=\"${MY_SHAREDIR}\"" "-DDOCDIR=\"${MY_DOCDIR}\""	\
 	"-DPLUGINDIR=\"${MY_PLUGINDIR}\"" $(MY_CFLAGS)
@@ -117,15 +123,14 @@ libfontforgeexe_la_SOURCES = alignment.c anchorsaway.c   \
 	encodingui.c fontinfo.c fontview.c freetypeui.c fvfontsdlg.c	\
 	fvmetricsdlg.c gotodlg.c groupsdlg.c histograms.c images.c		\
 	kernclass.c layer2layer.c lookupui.c macencui.c math.c			\
-	metricsview.c mmdlg.c nonlineartransui.c oflib.c openfontdlg.c	        \
+	metricsview.c mmdlg.c nonlineartransui.c openfontdlg.c	        \
 	prefs.c problems.c pythonui.c savefontdlg.c scriptingdlg.c		\
 	scstylesui.c searchview.c sftextfield.c showatt.c simplifydlg.c	        \
 	splashimage.c startui.c statemachine.c tilepath.c transform.c	        \
 	ttfinstrsui.c uiutil.c windowmenu.c justifydlg.c deltaui.c		\
 	usermenu.c macobjective.h                                               \
-    collabclientui.c collabclientui.h                                       \
-	sfundo.c \
-	wordlistparser.c wordlistparser.h exelibstamp.c
+	collabclientui.c collabclientui.h                                       \
+	sfundo.c wordlistparser.c wordlistparser.h fontforgeexe.h
 
 else !GRAPHICAL_USER_INTERFACE
 
@@ -138,7 +143,7 @@ MACFFEXE_LIBADD=macobjective.o
 endif MACINTOSH
 
 libfontforgeexe_la_CPPFLAGS = $(AM_CPPFLAGS) $(LIBZMQ_CFLAGS) $(GTK2_CFLAGS)
-libfontforgeexe_la_LIBADD = $(LTDLDEPS) $(LIBADD) $(GUILIBADD) $(MACFFEXE_LIBADD) $(MY_LIBS) $(GTK2_LIBS)
+libfontforgeexe_la_LIBADD = $(LTDLDEPS) $(LIBADD) $(GUILIBADD) $(MACFFEXE_LIBADD) $(MY_LIBS) $(GTK2_LIBS) $(top_builddir)/fontforge/libfontforge.la $(BREAKPAD_LIBADD)
 
 libfontforgeexe_la_LDFLAGS = $(MY_CFLAGS) -version-info $(LIBFONTFORGEEXE_VERSION) \
 	${MY_LIB_LDFLAGS}

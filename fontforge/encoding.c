@@ -26,6 +26,7 @@
  */
 
 #include "fontforgevw.h"
+#include "splinefont.h"
 #include <ustring.h>
 #include <utype.h>
 #include <math.h>
@@ -35,8 +36,10 @@
 #include <gfile.h>
 #include "plugins.h"
 #include "encoding.h"
+#include "psfont.h"
 #include "ffglib.h"
 #include <glib/gprintf.h>
+#include "xvasprintf.h"
 
 Encoding *default_encoding = NULL;
 
@@ -118,7 +121,7 @@ static Encoding texbase = { "TeX-Base-Encoding", 256, tex_base_encoding, NULL, N
 static Encoding original = { "Original", 0, NULL, NULL, &custom,                     1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, "", 0, 0, 0, NULL, NULL, NULL, NULL, NULL, 0, 0 };
 static Encoding unicodebmp = { "UnicodeBmp", 65536, NULL, NULL, &original,           1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, 0, 0, NULL, NULL, NULL, NULL, NULL, 0, 0 };
 static Encoding unicodefull = { "UnicodeFull", 17*65536, NULL, NULL, &unicodebmp,    1, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, "", 0, 0, 0, NULL, NULL, NULL, NULL, NULL, 0, 0 };
-static Encoding adobestd = { "AdobeStandard", 256, unicode_from_adobestd, AdobeStandardEncoding, &unicodefull,
+static Encoding adobestd = { "AdobeStandard", 256, unicode_from_adobestd, (char**)AdobeStandardEncoding, &unicodefull,
                                                                                      1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, 0, 0, NULL, NULL, NULL, NULL, NULL, 0, 0 };
 static Encoding symbol = { "Symbol", 256, unicode_from_MacSymbol, NULL, &adobestd,   1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "", 0, 0, 0, NULL, NULL, NULL, NULL, NULL, 0, 0 };
 
@@ -130,11 +133,11 @@ const char *FindUnicharName(void) {
     /* Even worse, both accept UCS-2, but under iconv it means native byte */
     /*  ordering and under libiconv it means big-endian */
     iconv_t test;
-    static char *goodname = NULL;
-    static char *names[] = { "UCS-4-INTERNAL", "UCS-4", "UCS4", "ISO-10646-UCS-4", "UTF-32", NULL };
-    static char *namesle[] = { "UCS-4LE", "UTF-32LE", NULL };
-    static char *namesbe[] = { "UCS-4BE", "UTF-32BE", NULL };
-    char **testnames;
+    static const char *goodname = NULL;
+    static const char *names[] = { "UCS-4-INTERNAL", "UCS-4", "UCS4", "ISO-10646-UCS-4", "UTF-32", NULL };
+    static const char *namesle[] = { "UCS-4LE", "UTF-32LE", NULL };
+    static const char *namesbe[] = { "UCS-4BE", "UTF-32BE", NULL };
+    const char **testnames;
     int i;
     union {
 	short s;
@@ -186,7 +189,7 @@ return( goodname );
 return( goodname );
 }
 
-static int TryEscape( Encoding *enc,char *escape_sequence ) {
+static int TryEscape( Encoding *enc, const char *escape_sequence ) {
     char from[20], ucs[20];
     size_t fromlen, tolen;
     ICONV_CONST char *fpt;
@@ -239,15 +242,17 @@ Encoding *_FindOrMakeEncoding(const char *name,int make_it) {
     /* iconv is not case sensitive */
 
     if ( strncasecmp(name,"iso8859_",8)==0 || strncasecmp(name,"koi8_",5)==0 ) {
-	/* Fixup for old naming conventions */
-	strncpy(buffer,name,sizeof(buffer));
-	*strchr(buffer,'_') = '-';
-	name = buffer;
+	    /* Fixup for old naming conventions */
+	    strncpy(buffer,name,sizeof(buffer));
+        buffer[sizeof(buffer)-1] = '\0';
+	    *strchr(buffer,'_') = '-';
+	    name = buffer;
     } else if ( strcasecmp(name,"iso-8859")==0 ) {
-	/* Fixup for old naming conventions */
-	strncpy(buffer,name,3);
-	strncpy(buffer+3,name+4,sizeof(buffer)-3);
-	name = buffer;
+	    /* Fixup for old naming conventions */
+	    strncpy(buffer,name,3);
+	    strncpy(buffer+3,name+4,sizeof(buffer)-3);
+        buffer[sizeof(buffer)-1] = '\0';
+	    name = buffer;
     } else if ( strcasecmp(name,"isolatin1")==0 ) {
         name = "iso8859-1";
     } else if ( strcasecmp(name,"isocyrillic")==0 ) {
@@ -480,14 +485,17 @@ return( 1 );
 static char *getPfaEditEncodings(void) {
     static char *encfile=NULL;
     char buffer[1025];
+    char *ffdir;
 
     if ( encfile!=NULL )
-return( encfile );
-    if ( getFontForgeUserDir(Config)==NULL )
-return( NULL );
-    sprintf(buffer,"%s/Encodings.ps", getFontForgeUserDir(Config));
+        return encfile;
+    ffdir = getFontForgeUserDir(Config);
+    if ( ffdir==NULL )
+        return NULL;
+    sprintf(buffer,"%s/Encodings.ps", ffdir);
+    free(ffdir);
     encfile = copy(buffer);
-return( encfile );
+    return encfile;
 }
 
 static void EncodingFree(Encoding *item) {
@@ -616,12 +624,11 @@ return( NULL );
 		return( NULL );
 	    }
 	    if ( item==head && item->next==NULL )
-		buf = (char *) g_strdup(_( "Please name this encoding" ));
+		buf = strdup(_( "Please name this encoding" ));
 	    else
-		buf = (char *) g_strdup_printf(_( "Please name encoding %d in this file" ), i );
+		buf = xasprintf(_( "Please name encoding %d in this file" ), i );
 
 	    name = ff_ask_string( buf, NULL, buf );
-	    g_free( buf );
 
 	    if ( name!=NULL ) {
 		item->enc_name = copy(name);
@@ -771,7 +778,7 @@ int NameUni2CID(struct cidmap *map, int uni, const char *name) {
     if ( uni!=-1 ) {
 		// Search for a matching code.
 		for ( i=0; i<map->namemax; ++i )
-		    if ( map->unicode[i]==uni )
+		    if ( map->unicode[i]==(uint32)uni )
 				return( i );
 		for ( alts=map->alts; alts!=NULL; alts=alts->next )
 		    if ( alts->uni==uni )
@@ -806,7 +813,7 @@ int MaxCID(struct cidmap *map) {
 return( map->cidmax );
 }
 
-static char *SearchDirForCidMap(char *dir,char *registry,char *ordering,
+static char *SearchDirForCidMap(const char *dir,char *registry,char *ordering,
 	int supplement,char **maybefile) {
     char maybe[FILENAME_MAX+1];
     struct dirent *ent;
@@ -947,10 +954,11 @@ return( ret );
 
 struct cidmap *FindCidMap(char *registry,char *ordering,int supplement,SplineFont *sf) {
     struct cidmap *map, *maybe=NULL;
-    char *file, *maybefile=NULL;
+    char *file;
+    char *maybefile=NULL;
     int maybe_sup = -1;
-    char *buts[3], *buts2[3], *buts3[3];
-    gchar *buf = NULL;
+    const char *buts[3], *buts2[3], *buts3[3];
+    char *buf = NULL;
     int ret;
 
     if ( sf!=NULL && sf->cidmaster ) sf = sf->cidmaster;
@@ -1004,16 +1012,14 @@ return( maybe );
 
     if ( file==NULL ) {
 	char *uret;
-	buf = g_strdup_printf( "%s-%s-*.cidmap", registry, ordering );
+	buf = xasprintf( "%s-%s-*.cidmap", registry, ordering );
 	if ( maybe==NULL && maybefile==NULL ) {
 	    buts3[0] = _("_Browse"); buts3[1] = _("_Give Up"); buts3[2] = NULL;
 	    ret = ff_ask(_("No cidmap file..."),(const char **)buts3,0,1,_("FontForge was unable to find a cidmap file for this font. It is not essential to have one, but some things will work better if you do. If you have not done so you might want to download the cidmaps from:\n   http://FontForge.sourceforge.net/cidmaps.tgz\nand then gunzip and untar them and move them to:\n  %.80s\n\nWould you like to search your local disk for an appropriate file?"),
 		    getFontForgeShareDir()==NULL?"/usr/share/fontforge":getFontForgeShareDir()
 		    );
-	    if ( ret==1 || no_windowing_ui ) {
-		g_free( buf );
+	    if ( ret==1 || no_windowing_ui )
 		buf = NULL;
-	    }
 	}
 	uret = NULL;
 	if ( ( buf != NULL ) && !no_windowing_ui ) {
@@ -1309,7 +1315,7 @@ return(NULL);
     new->familyname = copy(cidmaster->familyname);
     new->weight = copy(cidmaster->weight);
     new->copyright = copy(cidmaster->copyright);
-    sprintf(buffer,"%g", cidmaster->cidversion);
+    sprintf(buffer,"%g", (double)cidmaster->cidversion);
     new->version = copy(buffer);
     new->italicangle = cidmaster->italicangle;
     new->upos = cidmaster->upos;
@@ -1876,7 +1882,7 @@ return( NULL );
 	}
 	if ( !found ) {
 	    if ( sc->unicodeenc!=-1 &&
-		     sc->unicodeenc<unicode4_size &&
+                 sc->unicodeenc < (int)unicode4_size &&
 		     (j = EncFromUni(sc->unicodeenc,enc))!= -1 )
 		encoded[j] = i;
 	    else {
@@ -1887,7 +1893,7 @@ return( NULL );
 	    }
 	    for ( altuni=sc->altuni; altuni!=NULL; altuni=altuni->next ) {
 		if ( altuni->unienc!=-1 &&
-			 altuni->unienc<unicode4_size &&
+                     (uint32)altuni->unienc<unicode4_size &&
 			 altuni->vs==-1 &&
 			 altuni->fid==0 &&
 			 (j = EncFromUni(altuni->unienc,enc))!= -1 )
@@ -1997,7 +2003,45 @@ static void BCProtectUndoes( Undoes *undo,BDFChar *bc ) {
     }
 }
 
-void SFRemoveGlyph( SplineFont *sf,SplineChar *sc, int *flags ) {
+int SFReencode(SplineFont *sf, const char *encname, int force) {
+    Encoding *new_enc;
+    FontViewBase *fv = sf->fv;
+
+    if ( strmatch(encname,"compacted")==0 ) {
+	fv->normal = EncMapCopy(fv->map);
+	CompactEncMap(fv->map,sf);
+    } else {
+	new_enc = FindOrMakeEncoding(encname);
+	if ( new_enc==NULL )
+return -1;
+	if ( force )
+	    SFForceEncoding(sf,fv->map,new_enc);
+	else if ( new_enc==&custom )
+	    fv->map->enc = &custom;
+	else {
+	    EncMap *map = EncMapFromEncoding(sf,new_enc);
+	    EncMapFree(fv->map);
+	    if (fv->sf != NULL && fv->map == fv->sf->map) { fv->sf->map = map; }
+	    fv->map = map;
+	    if ( !no_windowing_ui )
+		FVSetTitle(fv);
+	}
+	if ( fv->normal!=NULL ) {
+	    EncMapFree(fv->normal);
+	    if (fv->sf != NULL && fv->map == fv->sf->map) { fv->sf->map = NULL; }
+	    fv->normal = NULL;
+	}
+	SFReplaceEncodingBDFProps(sf,fv->map);
+    }
+    free(fv->selected);
+    fv->selected = calloc(fv->map->enccount,sizeof(char));
+    if ( !no_windowing_ui )
+	FontViewReformatAll(sf);
+
+return 0;
+}
+
+void SFRemoveGlyph( SplineFont *sf,SplineChar *sc ) {
     struct splinecharlist *dep, *dnext;
     struct bdfcharlist *bdep, *bdnext;
     RefChar *rf, *refs, *rnext;
@@ -2394,22 +2438,7 @@ return( -1 );
 return( -1 );
 	}
 	if ( tpt-(char *) to == sizeof(unichar_t) )
-	{
-#if defined(__MINGW32__)
-	    {
-		printf("UniFromEnc(original ret) enc:%d initial result:%ld\n", enc, to[0] );
-		// For whatever reason the mingw32 build seems to always produce
-		// a result in byte swapped order.
-		unichar_t t = to[0];
-		printf("UniFromEnc(ret1) %ld\n",t );
-		unichar_t low16  = t & 0xFFFF;
-		unichar_t high16 = t >> 16;
-		t = (low16<<16) | high16;
-		printf("UniFromEnc(ret2) enc:%d final result:%ld\n", enc, t );
-		to[0] = t;
-	    }
-	    printf("UniFromEnc(final ret) %ld\n",to[0] );
-#endif	    
+	{	    
 	    return( to[0] );
 	}
     } else if ( encname->tounicode_func!=NULL ) {

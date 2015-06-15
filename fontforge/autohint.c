@@ -34,6 +34,8 @@
 #include <chardata.h>
 #include "edgelist.h"
 
+float OpenTypeLoadHintEqualityTolerance = 0.0;
+
 /* to create a type 1 font we must come up with the following entries for the
   private dictionary:
     BlueValues	-- an array of 2n entries where Blue[2i]<Blue[2i+1] max n=7, Blue[i]>0
@@ -387,10 +389,10 @@ void FindBlues( SplineFont *sf, int layer, real blues[14], real otherblues[10]) 
     }
 }
 
-static int PVAddBlues(BlueData *bd,int bcnt,char *pt) {
+static int PVAddBlues(BlueData *bd,unsigned bcnt,char *pt) {
     char *end;
     real val1, val2;
-    int i,j;
+    unsigned i,j;
 
     if ( pt==NULL )
 return( bcnt );
@@ -823,7 +825,7 @@ void ELOrder(EIList *el, int major ) {
 }
 
 static HintInstance *HIMerge(HintInstance *into, HintInstance *hi) {
-    HintInstance *n, *first = NULL, *last;
+    HintInstance *n, *first = NULL, *last = NULL;
 
     while ( into!=NULL && hi!=NULL ) {
 	if ( into->begin<hi->begin ) {
@@ -1272,7 +1274,8 @@ static HintInstance *SCGuessHintPoints(SplineChar *sc, int layer, StemInfo *stem
     int spt=0, ept=0;
     SplinePointList *spl;
     SplinePoint *sp, *np;
-    int sm, wm, i, j, val;
+    int sm, wm, i, j;
+    unsigned val;
     real coord;
     HintInstance *head, *test, *cur, *prev;
 
@@ -1385,7 +1388,7 @@ static void SCGuessHintInstancesLight(SplineChar *sc, int layer, StemInfo *stem,
     SplinePointList *spl;
     SplinePoint *sp, *np;
     int sm, wm, off;
-    real ob, oe;
+    real ob = 0.0, oe = 0.0;
     HintInstance *s=NULL, *w=NULL, *cur, *p, *t, *n, *w2;
     /* We've got a hint (from somewhere, old data, reading in a font, user specified etc.) */
     /*  but we don't have HintInstance info. So see if we can find those data */
@@ -1395,8 +1398,11 @@ static void SCGuessHintInstancesLight(SplineChar *sc, int layer, StemInfo *stem,
 
     for ( spl=sc->layers[layer].splines; spl!=NULL; spl=spl->next ) {
 	for ( sp=spl->first; ; sp = np ) {
-	    sm = (major?sp->me.x:sp->me.y)==stem->start;
-	    wm = (major?sp->me.x:sp->me.y)==stem->start+stem->width;
+	    
+	    float mexy = (major ? sp->me.x : sp->me.y);
+	    sm = equalWithTolerence( mexy, stem->start, OpenTypeLoadHintEqualityTolerance );
+	    wm = equalWithTolerence( mexy, stem->start+stem->width, OpenTypeLoadHintEqualityTolerance );
+
 	    if ( sp->next==NULL )
 	break;
 	    np = sp->next->to;
@@ -1468,10 +1474,10 @@ static void SCGuessHintInstancesLight(SplineChar *sc, int layer, StemInfo *stem,
 	n = t->next;
 	for ( w2=w; w2!=NULL && w2->begin<t->end ; w2=w2->next ) {
 	    if ( w2->end<=t->begin )
-	continue;
+		continue;
 	    if ( w2->begin<=t->begin && w2->end>=t->end ) {
 		/* Perfect match */
-	break;
+		break;
 	    }
 	    if ( w2->begin>=t->begin )
 		t->begin = w2->begin;
@@ -1484,7 +1490,7 @@ static void SCGuessHintInstancesLight(SplineChar *sc, int layer, StemInfo *stem,
 		n = cur;
 		t->end = w2->end;
 	    }
-	break;
+	    break;
 	}
 	if ( w2!=NULL && w2->begin>=t->end )
 	    w2 = NULL;
@@ -1525,7 +1531,7 @@ static void SCGuessHintInstancesLight(SplineChar *sc, int layer, StemInfo *stem,
 	chunkfree(w,sizeof(*w));
 	w=n;
     }
-
+    
     /* If we couldn't find anything, then see if there are two points which */
     /*  have the same x or y value and whose other coordinates match those of */
     /*  the hint */
@@ -1836,6 +1842,7 @@ static StemInfo *RefHintsMerge(StemInfo *into, StemInfo *rh, real mul, real offs
 	if ( h==NULL || start!=h->start || width!=h->width ) {
 	    n = chunkalloc(sizeof(StemInfo));
 	    n->start = start; n->width = width;
+	    n->ghost = rh->ghost;
 	    n->next = h;
 	    if ( prev==NULL )
 		into = n;
@@ -1942,6 +1949,9 @@ static void _SCClearHintMasks(SplineChar *sc,int layer, int counterstoo) {
     SplinePoint *sp;
     RefChar *ref;
 
+    if ( layer<0 || layer>=sc->layer_cnt )
+        return;
+
     if ( counterstoo ) {
 	free(sc->countermasks);
 	sc->countermasks = NULL; sc->countermask_cnt = 0;
@@ -1996,6 +2006,10 @@ void SCModifyHintMasksAdd(SplineChar *sc,int layer, StemInfo *new) {
     int index;
     StemInfo *h;
     int i;
+
+    if ( layer<0 || layer>=sc->layer_cnt )
+        return;
+
     /* We've added a new stem. Figure out where it goes and modify the */
     /*  hintmasks accordingly */
 
@@ -2114,7 +2128,7 @@ return( false );
 void SCFigureVerticalCounterMasks(SplineChar *sc) {
     HintMask masks[30];
     StemInfo *h;
-    int mc=0, i;
+    unsigned mc=0, i;
 
     /* I'm not supporting counter hints for mm fonts */
 
@@ -2148,7 +2162,7 @@ void SCFigureCounterMasks(SplineChar *sc) {
     HintMask masks[30];
     uint32 script;
     StemInfo *h;
-    int mc=0, i;
+    unsigned mc=0, i;
 
     /* I'm not supporting counter hints for mm fonts */
 
@@ -2883,11 +2897,31 @@ static DStemInfo *GDFindDStems(struct glyphdata *gd) {
         cur->left = stem->left;
         cur->right = stem->right;
         cur->unit = stem->unit;
-        MergeDStemInfo( gd->sf,&head,cur );
-	cur->where = DStemAddHIFromActive( stem );
+        cur->where = DStemAddHIFromActive( stem );
+        MergeDStemInfo(gd->sf, &head, cur);
     }
 return( head );
 }
+
+
+static bool inorder( real a, real b, real c )
+{
+    return a < b && b < c;
+}
+
+/**
+ * If fluffy is near enough to exact then clamp to exact.
+ * If fluffy is more than Tolerance away from exact then
+ * just return fluffy (no change).
+ */
+static real clampToIfNear( real exact, real fluffy, real Tolerance )
+{
+    if( inorder( exact - Tolerance, fluffy, exact + Tolerance ))
+	return exact;
+    
+    return fluffy;
+}
+
 
 void _SplineCharAutoHint( SplineChar *sc, int layer, BlueData *bd, struct glyphdata *gd2,
 	int gen_undoes ) {
@@ -2910,11 +2944,21 @@ void _SplineCharAutoHint( SplineChar *sc, int layer, BlueData *bd, struct glyphd
     if ( (gd=gd2)==NULL )
 	gd = GlyphDataBuild( sc,layer,bd,false );
     if ( gd!=NULL ) {
+	
 	sc->vstem = GDFindStems(gd,1);
 	sc->hstem = GDFindStems(gd,0);
+
 	if ( !gd->only_hv )
 	    sc->dstem = GDFindDStems(gd);
 	if ( gd2==NULL ) GlyphDataFree(gd);
+    }
+
+    real AutohintRoundingTolerance = 0.005;
+    StemInfo* s = sc->hstem;
+    for( ; s; s = s->next )
+    {
+	s->width = clampToIfNear( 20.0, s->width, AutohintRoundingTolerance );
+	s->width = clampToIfNear( 21.0, s->width, AutohintRoundingTolerance );
     }
 
     AutoHintRefs(sc,layer,bd,false,gen_undoes);
@@ -2954,7 +2998,7 @@ return;
     SplineCharAutoHint(sc,layer,bd);
 }
 
-int SFNeedsAutoHint( SplineFont *_sf,int layer) {
+int SFNeedsAutoHint( SplineFont *_sf) {
     int i,k;
     SplineFont *sf;
 

@@ -26,15 +26,16 @@
  */
 
 #include <stdio.h>
+#include "inc/basics.h"
 #include "ustring.h"
 #include "fileutil.h"
 #include "gfile.h"
+#include <sys/param.h>
 #include <sys/types.h>
 #include <sys/stat.h>		/* for mkdir */
 #include <unistd.h>
 #include <glib.h>
 #include <errno.h>			/* for mkdir_p */
-
 
 #ifdef _WIN32
 #define MKDIR(A,B) mkdir(A)
@@ -42,7 +43,7 @@
 #define MKDIR(A,B) mkdir(A,B)
 #endif
 
-static char dirname_[1024];
+static char dirname_[MAXPATHLEN+1];
 #if !defined(__MINGW32__)
  #include <pwd.h>
 #else
@@ -50,23 +51,60 @@ static char dirname_[1024];
  #include <shlobj.h>
 #endif
 
+/**
+ * \brief Removes the extension from a file path, if it exists.
+ * This method assumes that the path is already normalized.
+ * \param path The path to be modified. Is modified in-place.
+ * \return A pointer to the input path.
+ */
+char *GFileRemoveExtension(char *path) {
+    char *ext = strrchr(path, '.');
+    if (ext) {
+        char *fp = strrchr(path, '/');
+        if (!fp || ext > fp) {
+            *ext = '\0';
+        }
+    }
+    return path;
+}
+
+/**
+ * \brief Normalizes the file path as necessary.
+ * On Windows, this means changing backlashes to slashes.
+ *
+ * \param path The file path to be modified. Is modified in-place.
+ * \return A pointer to the input path
+ */
+char *GFileNormalizePath(char *path) {
 #if defined(__MINGW32__)
-static void _backslash_to_slash(char* c){
-    for(; *c; c++)
-	if(*c == '\\')
-	    *c = '/';
-}
-static void _u_backslash_to_slash(unichar_t* c){
-    for(; *c; c++)
-	if(*c == '\\')
-	    *c = '/';
-}
-#else
-static void _backslash_to_slash(char* c){
-}
-static void _u_backslash_to_slash(unichar_t* c){
-}
+    char *ptr;
+    for(ptr = path; *ptr; ptr++) {
+        if (*ptr == '\\') {
+            *ptr = '/';
+        }
+    }
 #endif
+    return path;
+}
+
+/**
+ * \brief Normalizes the file path as necessary.
+ * Unicode version of GFileNormalizePath.
+ *
+ * \param path The file path to be modified. Is modified in-place.
+ * \return A pointer to the input path
+ */
+unichar_t *u_GFileNormalizePath(unichar_t *path) {
+#if defined(__MINGW32__)
+    unichar_t *ptr;
+    for (ptr = path; *ptr; ptr++) {
+        if (*ptr == '\\') {
+            *ptr = '/';
+        }
+    }
+#endif
+    return path;
+}
 
 /* make directories.  make parent directories as needed,  with no error if
  * the path already exists */
@@ -111,7 +149,7 @@ return EXIT_SUCCESS;
 }
 
 /* Wrapper for formatted variable list printing. */
-char *smprintf(char *fmt, ...) {
+char *smprintf(const char *fmt, ...) {
 	va_list fmtargs;
 	char *ret;
 	int len;
@@ -138,13 +176,13 @@ char *GFileGetHomeDir(void) {
 	dir = getenv("USERPROFILE");
     if(dir){
 	char* buffer = copy(dir);
-	_backslash_to_slash(buffer);
+	GFileNormalizePath(buffer);
 return buffer;
     }
 return NULL;
 #else
     static char *dir;
-    int uid;
+    uid_t uid;
     struct passwd *pw;
 
     dir = getenv("HOME");
@@ -183,7 +221,7 @@ static void savestrcpy(char *dest,const char *src) {
     }
 }
 
-char *GFileGetAbsoluteName(char *name, char *result, int rsiz) {
+char *GFileGetAbsoluteName(const char *name, char *result, size_t rsiz) {
     /* result may be the same as name */
     char buffer[1000];
 
@@ -198,7 +236,7 @@ char *GFileGetAbsoluteName(char *name, char *result, int rsiz) {
 	    strcat(buffer,"/");
 	strcat(buffer,name);
 	#if defined(__MINGW32__)
-	_backslash_to_slash(buffer);
+	GFileNormalizePath(buffer);
 	#endif
 
 	/* Normalize out any .. */
@@ -232,7 +270,7 @@ char *GFileGetAbsoluteName(char *name, char *result, int rsiz) {
 	strncpy(result,name,rsiz);
 	result[rsiz-1]='\0';
 	#if defined(__MINGW32__)
-	_backslash_to_slash(result);
+	GFileNormalizePath(result);
 	#endif
     }
 return(result);
@@ -245,7 +283,7 @@ char *GFileMakeAbsoluteName(char *name) {
 return( copy(buffer));
 }
 
-char *GFileBuildName(char *dir,char *fname,char *buffer,int size) {
+char *GFileBuildName(char *dir,char *fname,char *buffer,size_t size) {
     int len;
 
     if ( dir==NULL || *dir=='\0' ) {
@@ -279,7 +317,7 @@ return( buffer );
 
 /* Given a filename in a directory, pick the directory out of it, and */
 /*  create a new filename using that directory and the given nametail */
-char *GFileReplaceName(char *oldname,char *fname,char *buffer,int size) {
+char *GFileReplaceName(char *oldname,char *fname,char *buffer,size_t size) {
     int len;
     char *dirend;
 
@@ -303,13 +341,16 @@ return( buffer );
 }
 
 char *GFileNameTail(const char *oldname) {
-    char *pt;
+    char *pt = 0;
 
     pt = strrchr(oldname,'/');
-    if ( pt !=NULL )
-return( pt+1);
-    else
-return( (char *)oldname );
+
+    // a final slash was found, so we know that p+1 is a valid
+    // address in the string.
+    if ( pt )
+	return( pt+1);
+
+    return( (char *)oldname );
 }
 
 char *GFileAppendFile(char *dir,char *name,int isdir) {
@@ -374,19 +415,19 @@ int GFileModifyableDir(const char *file) {
     return( GFileModifyable(buffer) );
 }
 
-int GFileReadable(char *file) {
+int GFileReadable(const char *file) {
 return( access(file,04)==0 );
 }
 
-int GFileMkDir(char *name) {
+int GFileMkDir(const char *name) {
 return( MKDIR(name,0755));
 }
 
-int GFileRmDir(char *name) {
+int GFileRmDir(const char *name) {
 return(rmdir(name));
 }
 
-int GFileUnlink(char *name) {
+int GFileUnlink(const char *name) {
 return(unlink(name));
 }
 
@@ -460,7 +501,7 @@ unichar_t *u_GFileGetAbsoluteName(unichar_t *name, unichar_t *result, int rsiz) 
 	if ( buffer[u_strlen(buffer)-1]!='/' )
 	    uc_strcat(buffer,"/");
 	u_strcat(buffer,name);
-	_u_backslash_to_slash(buffer);
+	u_GFileNormalizePath(buffer);
 
 	/* Normalize out any .. */
 	spt = rpt = buffer;
@@ -488,7 +529,7 @@ unichar_t *u_GFileGetAbsoluteName(unichar_t *name, unichar_t *result, int rsiz) 
     if (result!=name) {
 	u_strncpy(result,name,rsiz);
 	result[rsiz-1]='\0';
-	_u_backslash_to_slash(result);
+	u_GFileNormalizePath(result);
     }
 return(result);
 }
@@ -548,6 +589,27 @@ return( pt+1);
 return( (unichar_t *)oldname );
 }
 
+/**
+ * Remove the 'root' part of the file path if it is absolute;
+ * On Unix this is '/' and on Windows this is for e.g. 'C:/'
+ */
+static unichar_t *u_GFileRemoveRoot(unichar_t *path) {
+    //May happen on Windows too e.g. CygWin
+    if (*path == '/') {
+        path++;
+    }
+#ifdef _WIN32
+    //Check if it is a drive letter path
+    else if (((path[0] >= 'A' && path[0] <= 'Z') ||
+              (path[0] >= 'a' && path[0] <= 'z')) &&
+             path[1] == ':' && path[2] == '/') {
+             
+        path += 3;
+    }
+#endif
+    return path;
+}
+
 unichar_t *u_GFileNormalize(unichar_t *name) {
     unichar_t *pt, *base, *ppt;
 
@@ -556,10 +618,9 @@ unichar_t *u_GFileNormalize(unichar_t *name) {
 	if ( base==NULL )
 return( name );
 	++base;
-    } else if ( *name=='/' )
-	base = name+1;
-    else
-	base = name;
+    }
+    
+    base = u_GFileRemoveRoot(name);
     for ( pt=base; *pt!='\0'; ) {
 	if ( *pt=='/' )
 	    u_strcpy(pt,pt+1);
@@ -617,8 +678,7 @@ return( false );
 int u_GFileIsDir(const unichar_t *file) {
     char buffer[1024];
     u2def_strncpy(buffer,file,sizeof(buffer));
-    strcat(buffer,"/.");
-return( access(buffer,0)==0 );
+    return GFileIsDir(buffer);
 }
 
 int u_GFileExists(const unichar_t *file) {
@@ -671,9 +731,21 @@ return(unlink(buffer));
 
 static char *GResourceProgramDir = 0;
 
-char* getGResourceProgramDir() {
+char* getGResourceProgramDir(void) {
     return GResourceProgramDir;
 }
+
+char* getLibexecDir_NonWindows(void) 
+{
+    // FIXME this was indirectly introduced by
+    // https://github.com/fontforge/fontforge/pull/1838 and is not
+    // tested on Windows yet.
+    //
+    static char path[PATH_MAX+4];
+    snprintf( path, PATH_MAX, "%s/../libexec/", getGResourceProgramDir());
+    return path;
+}
+
 
 
 void FindProgDir(char *prog) {
@@ -712,7 +784,8 @@ char *getShareDir(void) {
 
     set = true;
 
-    pt = strstr(GResourceProgramDir,"/bin");
+    //Assume share folder is one directory up
+    pt = strrchr(GResourceProgramDir, '/');
     if ( pt==NULL ) {
 #ifdef SHAREDIR
 	return( sharedir = SHAREDIR );
@@ -773,7 +846,7 @@ char *getHelpDir(void) {
 #if defined(DOCDIR)
     prefix = DOCDIR;
 #endif
-    char* postfix = "/../doc/fontforge/";
+    const char* postfix = "/../doc/fontforge/";
     int len = strlen(prefix) + strlen(postfix) + 2;
     sharedir = malloc(len);
     strcpy(sharedir,prefix);
@@ -790,12 +863,12 @@ char *getUserHomeDir(void) {
 	if( dir==NULL )
 	dir = getenv("USERPROFILE");
 	if( dir!=NULL ) {
-	_backslash_to_slash(dir);
+	GFileNormalizePath(dir);
 return dir;
 	}
 return NULL;
 #else
-	int uid;
+	uid_t uid;
 	struct passwd *pw;
 	char *home = getenv("HOME");
 
@@ -819,13 +892,14 @@ return NULL;
  * save files.  On Unix-likes, the argument `dir` (see the below case switch,
  * enum in inc/gfile.h) determines which directory is returned according to the
  * XDG Base Directory Specification.  On Windows, the argument is ignored--the
- * home directory as obtained by getUserHomeDir() is returned.  On error, NULL
- * is returned.
+ * home directory as obtained by getUserHomeDir() appended with "/FontForge" is
+ * returned. On error, NULL is returned.
  *
  * http://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html
  */
 char *getFontForgeUserDir(int dir) {
-	char *def, *home, *xdg;
+	const char *def;
+	const char *home, *xdg;
 	char *buf = NULL;
 
 	/* find home directory first, it is needed if any of the xdg env vars are
@@ -836,9 +910,13 @@ char *getFontForgeUserDir(int dir) {
 return NULL;
 	}
 #if defined(__MINGW32__)
-	/* If we are on Windows, just use the home directory (%APPDATA% or
-	 * %USERPROFILE% in that order) for everything */
-return home;
+	/* Allow for preferences to be saved locally in a 'portable' configuration. */ 
+	if (getenv("FF_PORTABLE") != NULL) {
+		buf = smprintf("%s/preferences/", getShareDir());
+	} else {
+		buf = smprintf("%s/FontForge/", home);
+	}
+	return buf;
 #else
 	/* Home directory exists, so check for environment variables.  For each of
 	 * XDG_{CACHE,CONFIG,DATA}_HOME, assign `def` as the corresponding fallback
@@ -870,17 +948,19 @@ return NULL;
 	 * the value "$HOME/.cache/fontforge" */
 	buf = smprintf("%s/%s/fontforge", home, def);
 	if(buf != NULL) {
-	/* try to create buf.  If creating the directory fails, return NULL
-	 * because nothing will get saved into an inaccessible directory.  */
-	if(mkdir_p(buf, 0755) != EXIT_SUCCESS)
-return NULL;
-return buf;
+	    /* try to create buf.  If creating the directory fails, return NULL
+	     * because nothing will get saved into an inaccessible directory.  */
+            if ( mkdir_p(buf, 0755) != EXIT_SUCCESS ) {
+                free(buf);
+                return NULL;
+            }
+            return buf;
 	}
 return NULL;
 #endif
 }
 
-long GFileGetSize(char *name) {
+off_t GFileGetSize(char *name) {
 /* Get the binary file size for file 'name'. Return -1 if error. */
     struct stat buf;
     long rc;
@@ -902,7 +982,7 @@ char *GFileReadAll(char *name) {
 	    size_t bread=fread(ret,1,sz,fp);
 	    fclose(fp);
 
-	    if( bread==sz )
+	    if( bread==(size_t)sz )
 		return( ret );
 	}
 	free(ret);
@@ -910,8 +990,14 @@ char *GFileReadAll(char *name) {
     return( 0 );
 }
 
+/*
+ * Write char string 'data' into file 'name'. Return -1 if error.
+ **/
 int GFileWriteAll(char *filepath, char *data) {
-/* Write char string 'data' into file 'name'. Return -1 if error. */
+    
+    if( !data )
+	return -1;
+    
     size_t bwrite = strlen(data);
     FILE* fp;
 
@@ -948,6 +1034,7 @@ char *GFileGetHomeDocumentsDir(void)
     my_documents[ pos++ ] = '\\';
     my_documents[ pos++ ] = '\0';
     ret = copy( my_documents );
+	GFileNormalizePath(ret);
     return ret;
 #endif
 
@@ -957,14 +1044,49 @@ char *GFileGetHomeDocumentsDir(void)
     return ret;
 }
 
-
-char *GFileDirName(const char *path)
-{
-    char ret[PATH_MAX+1];
-    strncpy( ret, path, PATH_MAX );
-    _backslash_to_slash( ret );
-    char *pt = strrchr( ret, '/' );
-    if ( pt )
-	*pt = '\0';
-    return strdup(ret);
+unichar_t *u_GFileGetHomeDocumentsDir(void) {
+    unichar_t* dir = NULL;
+    char* tmp = GFileGetHomeDocumentsDir();
+    if(tmp) {
+        dir = uc_copy(tmp);
+    }
+    return dir;
 }
+
+
+char *GFileDirNameEx(const char *path, int treat_as_file)
+{
+    char *ret = NULL;
+    if (path != NULL) {
+        //Must allocate enough space to append a trailing slash.
+        size_t len = strlen(path);
+        ret = malloc(len + 2);
+        
+        if (ret != NULL) {
+            char *pt;
+            
+            strcpy(ret, path);
+            GFileNormalizePath(ret);
+            if (treat_as_file || !GFileIsDir(ret)) {
+                pt = strrchr(ret, '/');
+                if (pt != NULL) {
+                    *pt = '\0';
+                }
+            }
+            
+            //Keep only one trailing slash
+            len = strlen(ret);
+            for (pt = ret + len - 1; pt >= ret && *pt == '/'; pt--) {
+                *pt = '\0';
+            }
+            *++pt = '/';
+            *++pt = '\0';
+        }
+    }
+    return ret;
+}
+
+char *GFileDirName(const char *path) {
+    return GFileDirNameEx(path, 0);
+}
+

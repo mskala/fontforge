@@ -1532,6 +1532,15 @@ return( true );
 
 #define MID_Warnings	3000
 
+static void BVMenuOpen(GWindow gw, struct gmenuitem *mi, GEvent *g) {
+    BitmapView *d = (BitmapView*)GDrawGetUserData(gw);
+    FontView *fv = NULL;
+    if (d) {
+        fv = (FontView*)d->fv;
+    }
+    _FVMenuOpen(fv);
+}
+
 static void BVMenuClose(GWindow gw,struct gmenuitem *mi,GEvent *g) {
     GDrawDestroyWindow(gw);
 }
@@ -2102,7 +2111,7 @@ static GMenuItem2 dummyitem[] = {
 };
 static GMenuItem2 fllist[] = {
     { { (unichar_t *) N_("Font|_New"), (GImage *) "filenew.png", COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 0, 1, 1, 0, 'N' }, H_("New|Ctl+N"), NULL, NULL, MenuNew, 0 },
-    { { (unichar_t *) N_("_Open"), (GImage *) "fileopen.png", COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 0, 1, 1, 0, 'O' }, H_("Open|Ctl+O"), NULL, NULL, MenuOpen, 0 },
+    { { (unichar_t *) N_("_Open"), (GImage *) "fileopen.png", COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 0, 1, 1, 0, 'O' }, H_("Open|Ctl+O"), NULL, NULL, BVMenuOpen, 0 },
     { { (unichar_t *) N_("Recen_t"), (GImage *) "filerecent.png", COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 0, 1, 1, 0, 't' }, NULL, dummyitem, MenuRecentBuild, NULL, MID_Recent },
     { { (unichar_t *) N_("_Close"), (GImage *) "fileclose.png", COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 0, 1, 1, 0, 'C' }, H_("Close|Ctl+Shft+Q"), NULL, NULL, BVMenuClose, 0 },
     { { NULL, NULL, COLOR_DEFAULT, COLOR_DEFAULT, NULL, NULL, 0, 1, 0, 0, 0, 1, 0, 0, 0, '\0' }, NULL, NULL, NULL, NULL, 0 }, /* line */
@@ -2216,17 +2225,30 @@ static unsigned char bitmap_bits[] = {
    0x30, 0x0c, 0xf0, 0x03, 0xf0, 0x03, 0x30, 0x0c, 0x30, 0x0c, 0x30, 0x0c,
    0x30, 0x0c, 0xfc, 0x03, 0xfc, 0x03, 0x00, 0x00};
 
+static int bitmapview_ready = false;
+
+static void BitmapViewFinish() {
+  if ( !bitmapview_ready ) return;
+  bitmapview_ready = 0;
+  mb2FreeGetText(mblist);
+}
+
+void BitmapViewFinishNonStatic() {
+  BitmapViewFinish();
+}
+
 static void BitmapViewInit(void) {
-    static int done = false;
+    // static int done = false; // superseded by bitmapview_ready.
     int i;
 
-    if ( done )
+    if ( bitmapview_ready )
 return;
-    done = true;
+    bitmapview_ready = true;
 
     mb2DoGetText(mblist);
     for ( i=0; BVFlipNames[i]!=NULL ; ++i )
 	BVFlipNames[i] = S_(BVFlipNames[i]);
+    atexit(&BitmapViewFinishNonStatic);
 }
 
 BitmapView *BitmapViewCreate(BDFChar *bc, BDFFont *bdf, FontView *fv, int enc) {

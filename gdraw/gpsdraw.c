@@ -31,6 +31,7 @@
 #if !defined(__MINGW32__)
 #include <sys/wait.h>
 #endif
+#include "fontforge-config.h"
 #include <unistd.h>
 
 #include "gpsdrawP.h"
@@ -1423,6 +1424,12 @@ static struct displayfuncs psfuncs = {
     NULL,
     NULL
 };
+
+void _GPSDraw_DestroyDisplay(GDisplay *gdisp) {
+  if (gdisp->fontstate != NULL) { free(gdisp->fontstate); gdisp->fontstate = NULL; }
+  free(gdisp);
+  return;
+}
 
 GDisplay *_GPSDraw_CreateDisplay() {
     GPSDisplay *gdisp;

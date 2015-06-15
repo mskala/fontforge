@@ -35,6 +35,7 @@
 #include <stdarg.h>
 #include "ttf.h"
 #include "lookups.h"
+#include "xvasprintf.h"
 
 struct opentype_feature_friendlynames friendlies[] = {
     { CHR('a','a','l','t'),	"aalt", N_("Access All Alternates"),	gsub_single_mask|gsub_alternate_mask },
@@ -387,7 +388,7 @@ uint32 *SFLangsInScript(SplineFont *sf,int gpos,uint32 script) {
 		for ( sl=fl->scripts ; sl!=NULL; sl=sl->next ) {
 		    if ( sl->script==script ) {
 			for ( l=0; l<sl->lang_cnt; ++l ) {
-			    int lang;
+			    uint32 lang;
 			    if ( l<MAX_LANG )
 				lang = sl->langs[l];
 			    else
@@ -464,7 +465,7 @@ uint32 *SFFeaturesInScriptLang(SplineFont *sf,int gpos,uint32 script,uint32 lang
 			if ( fl->ismac && gpos==-2 )
 			    matched = true;
 			else for ( l=0; l<sl->lang_cnt; ++l ) {
-			    int testlang;
+			    uint32 testlang;
 			    if ( l<MAX_LANG )
 				testlang = sl->langs[l];
 			    else
@@ -532,7 +533,7 @@ OTLookup **SFLookupsInScriptLangFeature(SplineFont *sf,int gpos,uint32 script,ui
 		for ( sl=fl->scripts ; sl!=NULL; sl=sl->next ) {
 		    if ( sl->script==script ) {
 			for ( l=0; l<sl->lang_cnt; ++l ) {
-			    int testlang;
+			    uint32 testlang;
 			    if ( l<MAX_LANG )
 				testlang = sl->langs[l];
 			    else
@@ -599,6 +600,8 @@ return( false );
 	    else
 		start = pt+1;
 	}
+      default:
+      break;
     }
 return( true );
 }
@@ -772,6 +775,8 @@ void SFFindUnusedLookups(SplineFont *sf) {
 		  case at_cexit:
 		    ap->anchor->has_base = true;
 		  break;
+		  default:
+		  break;
 		}
 	    }
 	    for ( isv=0; isv<2; ++isv ) {
@@ -936,7 +941,7 @@ static void RemoveJSTFReferences(SplineFont *sf,OTLookup *dying) {
     }
 }
 
-static void RemoveNestedReferences(SplineFont *sf,int isgpos,OTLookup *dying) {
+static void RemoveNestedReferences(SplineFont *sf,int isgpos) {
     OTLookup *otl;
     struct lookup_subtable *sub;
     int i,j,k;
@@ -1016,7 +1021,7 @@ void SFRemoveUnusedLookupSubTables(SplineFont *sf,
 		    sf->gpos_lookups = otlnext;
 		else
 		    sf->gsub_lookups = otlnext;
-		RemoveNestedReferences(sf,gpos,otl);
+		RemoveNestedReferences(sf,gpos);
 		OTLookupFree(otl);
 	    } else {
 		for ( prev=NULL, sub=otl->subtables; sub!=NULL; sub=subnext ) {
@@ -1173,7 +1178,7 @@ void SFRemoveLookup(SplineFont *sf,OTLookup *otl,int remove_acs) {
     else
 	sf->gsub_lookups = otl->next;
 
-    RemoveNestedReferences(sf,isgpos,otl);
+    RemoveNestedReferences(sf,isgpos);
     RemoveJSTFReferences(sf,otl);
 
     otl->next = NULL;
@@ -1263,7 +1268,7 @@ void FListsAppendScriptLang(FeatureScriptLangList *fl,uint32 script_tag,uint32 l
 }
 
 char *SuffixFromTags(FeatureScriptLangList *fl) {
-    static struct { uint32 tag; char *suffix; } tags2suffix[] = {
+    static struct { uint32 tag; const char *suffix; } tags2suffix[] = {
         { CHR('v','r','t','2'), "vert" },	/* Will check for vrt2 later */
         { CHR('o','n','u','m'), "oldstyle" },
         { CHR('s','u','p','s'), "superior" },
@@ -1284,7 +1289,7 @@ return( copy( tags2suffix[i].suffix ));
 return( NULL );
 }
 
-char *lookup_type_names[2][10] = {
+const char *lookup_type_names[2][10] = {
     {   N_("Undefined substitution"), N_("Single Substitution"), N_("Multiple Substitution"),
         N_("Alternate Substitution"), N_("Ligature Substitution"), N_("Contextual Substitution"),
         N_("Contextual Chaining Substitution"), N_("Extension"),
@@ -1300,7 +1305,7 @@ char *lookup_type_names[2][10] = {
 
 /* This is a non-ui based copy of a similar list in lookupui.c */
 static struct {
-    char *text;
+    const char *text;
     uint32 tag;
 } localscripts[] = {
 /* GT: See the long comment at "Property|New" */
@@ -1464,7 +1469,7 @@ char *TagFullName(SplineFont *sf,uint32 tag, int ismac, int onlyifknown) {
 	    free( setname );
 	}
     } else {
-	int stag = tag;
+	uint32 stag = tag;
 	if ( tag==CHR('n','u','t','f') )	/* early name that was standardize later as... */
 	    stag = CHR('a','f','r','c');	/*  Stood for nut fractions. "nut" meaning "fits in an en" in old typography-speak => vertical fractions rather than diagonal ones */
 	if ( tag==REQUIRED_FEATURE ) {
@@ -1498,7 +1503,7 @@ void NameOTLookup(OTLookup *otl,SplineFont *sf) {
     char *userfriendly = NULL, *script;
     FeatureScriptLangList *fl;
     char *lookuptype;
-    char *format;
+    const char *format;
     struct lookup_subtable *subtable;
     int k;
 
@@ -1819,7 +1824,7 @@ void FLMerge(OTLookup *into, OTLookup *from) {
 
 void SFSubTablesMerge(SplineFont *_sf,struct lookup_subtable *subfirst,
 	struct lookup_subtable *subsecond) {
-    int lookup_type = subfirst->lookup->lookup_type;
+    uint16 lookup_type = subfirst->lookup->lookup_type;
     int gid,k,isv;
     SplineChar *sc;
     SplineFont *sf = _sf;
@@ -2014,13 +2019,28 @@ static KernClass *SF_AddKernClass(struct sfmergecontext *mc,KernClass *kc,
     newkc->seconds = ClassCopy(newkc->second_cnt,newkc->seconds);
     newkc->offsets = malloc(newkc->first_cnt*newkc->second_cnt*sizeof(int16));
     memcpy(newkc->offsets,kc->offsets,newkc->first_cnt*newkc->second_cnt*sizeof(int16));
+    // We support group kerning as well.
+    if (newkc->firsts_names) newkc->firsts_names = ClassCopy(newkc->first_cnt,newkc->firsts_names);
+    if (newkc->seconds_names) newkc->seconds_names = ClassCopy(newkc->second_cnt,newkc->seconds_names);
+    if (newkc->firsts_flags) {
+      newkc->firsts_flags = malloc(newkc->first_cnt*sizeof(int));
+      memcpy(newkc->firsts_flags,kc->firsts_flags,newkc->first_cnt*sizeof(int));
+    }
+    if (newkc->seconds_flags) {
+      newkc->seconds_flags = malloc(newkc->second_cnt*sizeof(int));
+      memcpy(newkc->seconds_flags,kc->seconds_flags,newkc->second_cnt*sizeof(int));
+    }
+    if (newkc->offsets_flags) {
+      newkc->offsets_flags = malloc(newkc->first_cnt*newkc->second_cnt*sizeof(int));
+      memcpy(newkc->offsets_flags,kc->offsets_flags,newkc->first_cnt*newkc->second_cnt*sizeof(int));
+    }
 return( newkc );
 }
 
 static FPST *SF_AddFPST(struct sfmergecontext *mc,FPST *fpst,
 	struct lookup_subtable *sub ) {
     FPST *newfpst;
-    int i, k, cur;
+    int i, k;
 
     newfpst = chunkalloc(sizeof(FPST));
     *newfpst = *fpst;
@@ -2039,7 +2059,6 @@ static FPST *SF_AddFPST(struct sfmergecontext *mc,FPST *fpst,
     newfpst->rules = malloc(newfpst->rule_cnt*sizeof(struct fpst_rule));
     memcpy(newfpst->rules,fpst->rules,newfpst->rule_cnt*sizeof(struct fpst_rule));
 
-    cur = 0;
     for ( i=0; i<newfpst->rule_cnt; ++i ) {
 	struct fpst_rule *r = &newfpst->rules[i], *oldr = &fpst->rules[i];
 
@@ -2074,6 +2093,8 @@ static FPST *SF_AddFPST(struct sfmergecontext *mc,FPST *fpst,
 	    r->u.rcoverage.bcovers = ClassCopy( r->u.rcoverage.bcnt, r->u.rcoverage.bcovers );
 	    r->u.rcoverage.fcovers = ClassCopy( r->u.rcoverage.fcnt, r->u.rcoverage.fcovers );
 	    r->u.rcoverage.replacements = copy( r->u.rcoverage.replacements );
+	  break;
+	  default:
 	  break;
 	}
     }
@@ -2194,6 +2215,8 @@ static int SF_SCAddPST(SplineChar *tosc,PST *pst,struct lookup_subtable *sub) {
       case pst_alternate:
       case pst_multiple:
 	newpst->u.subs.variant = copy(pst->u.subs.variant);
+      break;
+      default:
       break;
     }
 return( true );
@@ -2597,20 +2620,13 @@ struct lookup_data {
 
 static int ApplyLookupAtPos(uint32 tag, OTLookup *otl,struct lookup_data *data,int pos);
 
-static int GlyphNameInClass(char *name,char *class ) {
-    char *pt;
+static int GlyphNameInClass(const char *name,const char *class) {
+    const char *pt;
     int len = strlen(name);
 
-    if ( class==NULL )
-return( false );
-
-    pt = class;
-    while ( (pt=strstr(pt,name))!=NULL ) {
-	if ( pt==NULL )
-return( false );
+    for (pt = class; pt && (pt=strstr(pt,name))!=NULL; pt += len) {
 	if ( (pt==class || pt[-1]==' ') && (pt[len]=='\0' || pt[len]==' '))
 return( true );
-	pt+=len;
     }
 
 return( false );
@@ -2757,6 +2773,8 @@ return;
 	data->str[first_pos+1] = temp3;
 	data->str[first_pos] = temp4;
       break;
+      default:
+      break;
     }
 }
 
@@ -2793,7 +2811,7 @@ return( 0 );
 return( cnt );
 }
 
-static void ApplyAppleStateMachine(uint32 tag, OTLookup *otl,struct lookup_data *data) {
+static void ApplyAppleStateMachine(OTLookup *otl,struct lookup_data *data) {
     struct lookup_subtable *sub;
     int state, class, pos, mark_pos, markend_pos, i;
     ASM *sm;
@@ -2875,6 +2893,8 @@ static void ApplyAppleStateMachine(uint32 tag, OTLookup *otl,struct lookup_data 
 		    kern_stack[0] = pos;
 		    if ( ++kcnt>8 ) kcnt = 8;
 		}
+	      break;
+	      default:
 	      break;
 	    }
 	    if ( entry->flags & 0x8000 )
@@ -3036,7 +3056,7 @@ static int ContextualMatch(struct lookup_subtable *sub,struct lookup_data *data,
     int i, cpos, retpos, r;
     FPST *fpst = sub->fpst;
     int lookup_flags = sub->lookup->lookup_flags;
-    char *pt;
+    const char *pt;
 
     /* If we should skip the current glyph then don't try for a match here */
     cpos = skipglyphs(lookup_flags,data,pos);
@@ -3053,7 +3073,7 @@ return( 0 );
 	    if ( fpst->format==pst_glyphs ) {
 		pt = rule->u.glyph.back;
 		for ( i=bskipglyphs(lookup_flags,data,pos-1), cpos=0; i>=0; i = bskipglyphs(lookup_flags,data,i-1)) {
-		    char *name = data->str[i].sc->name;
+		    const char *name = data->str[i].sc->name;
 		    int len = strlen( name );
 		    if ( strncmp(name,pt,len)!=0 || (pt[len]!='\0' && pt[len]!=' '))
 		break;
@@ -3084,7 +3104,7 @@ return( 0 );
 	if ( fpst->format==pst_glyphs ) {
 	    pt = rule->u.glyph.names;
 	    for ( i=pos, cpos=0; i<data->cnt && *pt!='\0'; i = skipglyphs(lookup_flags,data,i+1)) {
-		char *name = data->str[i].sc->name;
+		const char *name = data->str[i].sc->name;
 		int len = strlen( name );
 		if ( strncmp(name,pt,len)!=0 || (pt[len]!='\0' && pt[len]!=' '))
 	    break;
@@ -3130,7 +3150,7 @@ return( 0 );		/* Not ready to deal with reverse chainging */
 	    if ( fpst->format==pst_glyphs ) {
 		pt = rule->u.glyph.fore;
 		for ( i=retpos; i<data->cnt && *pt!='\0'; i = skipglyphs(lookup_flags,data,i+1)) {
-		    char *name = data->str[i].sc->name;
+		    const char *name = data->str[i].sc->name;
 		    int len = strlen( name );
 		    if ( strncmp(name,pt,len)!=0 || (pt[len]!='\0' && pt[len]!=' '))
 		break;
@@ -3615,7 +3635,7 @@ static void ApplyLookup(uint32 tag, OTLookup *otl,struct lookup_data *data) {
 
     if ( lt == morx_indic || lt == morx_context || lt == morx_insert ||
 	    lt == kern_statemachine )
-	ApplyAppleStateMachine(tag,otl,data);
+	ApplyAppleStateMachine(otl,data);
     else {
 	/* OpenType */
 	for ( pos = 0; pos<data->cnt; ) {
@@ -3708,7 +3728,7 @@ struct opentype_str *ApplyTickedFeatures(SplineFont *sf,uint32 *flist, uint32 sc
 return( data.str );
 }
 
-static void doreplace(char **haystack,char *start,char *search,char *rpl,int slen) {
+static void doreplace(char **haystack,char *start,const char *rpl,int slen) {
     int rlen;
     char *pt = start+slen;
 
@@ -3732,7 +3752,7 @@ static void doreplace(char **haystack,char *start,char *search,char *rpl,int sle
     }
 }
 
-static int rplstr(char **haystack,char *search, char *rpl,int multipleoccurances) {
+static int rplstr(char **haystack,const char *search, const char *rpl,int multipleoccurances) {
     char *start, *pt, *base = *haystack;
     int ch, match, slen = strlen(search);
     int any = 0;
@@ -3754,7 +3774,7 @@ return( any );
 	    *pt = ch;
 	}
 	if ( match==0 ) {
-	    doreplace(haystack,start,search,rpl,slen);
+	    doreplace(haystack,start,rpl,slen);
 	    if ( !multipleoccurances )
 return( true );
 	    any = true;
@@ -3767,11 +3787,12 @@ return( true );
     }
 }
 
-static int rplglyphname(char **haystack,char *search, char *rpl) {
+static int rplglyphname(char **haystack,const char *search, const char *rpl) {
     /* If we change "f" to "uni0066" then we should also change "f.sc" to */
     /*  "uni0066.sc" and "f_f_l" to "uni0066_uni0066_l" */
     char *start, *pt, *base = *haystack;
-    int ch, match, slen = strlen(search);
+    int ch, match;
+    size_t slen = strlen(search);
     int any = 0;
 
     if ( slen>=strlen( base ))
@@ -3785,7 +3806,7 @@ return( any );
 	while ( *pt!='_' && *pt!='\0' && *pt!='.' ) ++pt;
 	if ( *pt=='\0' && start==base )	/* Don't change any unsegmented names */
 return( false );			/* In particular don't rename ourselves*/
-	if ( pt-start!=slen )
+	if ( pt-start!=(ptrdiff_t)slen )
 	    match = -1;
 	else {
 	    ch = *pt; *pt='\0';
@@ -3793,7 +3814,7 @@ return( false );			/* In particular don't rename ourselves*/
 	    *pt = ch;
 	}
 	if ( match==0 ) {
-	    doreplace(haystack,start,search,rpl,slen);
+	    doreplace(haystack,start,rpl,slen);
 	    any = true;
 	    if ( base!=*haystack ) {
 		pt = *haystack + (start-base) + strlen(rpl);
@@ -3804,10 +3825,10 @@ return( false );			/* In particular don't rename ourselves*/
     }
 }
 
-static int glyphnameIsComponent(char *haystack,char *search) {
+static int glyphnameIsComponent(const char *haystack, const char *search) {
     /* Check for a glyph name in ligature names and dotted names */
-    char *start, *pt;
-    int slen = strlen(search);
+    const char *start, *pt;
+    size_t slen = strlen(search);
 
     if ( slen>=strlen( haystack ))
 return( false );
@@ -3820,12 +3841,12 @@ return( false );
 	while ( *pt!='_' && *pt!='\0' && *pt!='.' ) ++pt;
 	if ( *pt=='\0' && start==haystack )/* Don't change any unsegmented names */
 return( false );			/* In particular don't rename ourselves*/
-	if ( pt-start==slen && strncmp(start,search,slen)==0 )
+	if ( pt-start==(ptrdiff_t)slen && strncmp(start,search,slen)==0 )
 return( true );
     }
 }
 
-static int gvfixup(struct glyphvariants *gv,char *old, char *new) {
+static int gvfixup(struct glyphvariants *gv,const char *old, const char *new) {
     int i;
     int ret=0;
 
@@ -3842,7 +3863,7 @@ return( false );
 return( ret );
 }
 
-void SFGlyphRenameFixup(SplineFont *sf, char *old, char *new, int rename_related_glyphs) {
+void SFGlyphRenameFixup(SplineFont *sf, const char *old, const char *new, int rename_related_glyphs) {
 /* NOTE: Existing GUI behaviour renames glyphs, rename_related_glyphs turns */
 /* off this behaviour for scripting - see github issue #523 */
     int k, gid, isv;
@@ -3957,7 +3978,6 @@ struct lookup_subtable *SFSubTableFindOrMake(SplineFont *sf,uint32 tag,uint32 sc
     OTLookup *otl, *found=NULL;
     int isgpos = lookup_type>=gpos_start;
     struct lookup_subtable *sub;
-    int isnew = false;
 
     if ( sf->cidmaster ) sf = sf->cidmaster;
     base = isgpos ? &sf->gpos_lookups : &sf->gsub_lookups;
@@ -3982,7 +4002,6 @@ return( sub );
 	found->features->scripts->lang_cnt = 1;
 
 	SortInsertLookup(sf, found);
-	isnew = true;
     }
 
     sub = chunkalloc(sizeof(struct lookup_subtable));
@@ -4436,7 +4455,7 @@ int KernClassFindIndexContaining( char **firsts_or_seconds,
 }
 
 
-int KernClassContains(KernClass *kc, char *name1, char *name2, int ordered ) {
+int KernClassContains(KernClass *kc, const char *name1, const char *name2, int ordered ) {
     int infirst=0, insecond=0, scpos1, kwpos1, scpos2, kwpos2;
     int i;
 
@@ -4479,7 +4498,7 @@ return( kc->offsets[kwpos1*kc->second_cnt+scpos2] );
 return( 0 );
 }
 
-int KCFindName(char *name, char **classnames, int cnt, int allow_class0 ) {
+int KCFindName(const char *name, char **classnames, int cnt, int allow_class0 ) {
     int i;
     char *pt, *end, ch;
 
@@ -4674,15 +4693,6 @@ return( NULL );
 return( ret );
 }
 
-static char *my_asprintf( const char *format,...) {
-    va_list ap;
-    char buffer[400];
-    va_start(ap,format);
-    vsnprintf(buffer,sizeof(buffer),format,ap);
-    va_end(ap);
-return( copy( buffer ));
-}
-
 typedef struct lookuplist {
     OTLookup *lookup;
     struct lookuplist *next;
@@ -4730,29 +4740,29 @@ char *FPSTRule_From_Str(SplineFont *sf,FPST *fpst,struct fpst_rule *rule,
 	start = lpt;
 	if ( *start=='|' ) {
 	    if ( fpst->type==pst_contextpos || fpst->type==pst_contextsub )
-return( my_asprintf( _("Separation marks only meaningful in contextual chaining lookups, starting at: %.20s..."), lpt ));
+return( xasprintf( _("Separation marks only meaningful in contextual chaining lookups, starting at: %.20s..."), lpt ));
 	    if ( first==-1 )
 		first = cnt;
 	    else if ( last==-1 )
 		last = cnt-1;
 	    else
-return( my_asprintf( _("Too many separation marks, starting at: %.20s..."), lpt ));
+return( xasprintf( _("Too many separation marks, starting at: %.20s..."), lpt ));
 	    ++lpt;
     continue;
 	} else if ( *start=='[' ) {
 	    /* A coverage table */
 	    if ( fpst->format!=pst_coverage && fpst->format!=pst_reversecoverage )
-return( my_asprintf( _("A coverage table was found in a glyph or class based contextual lookup, starting at: %.20s..."), lpt ));
+return( xasprintf( _("A coverage table was found in a glyph or class based contextual lookup, starting at: %.20s..."), lpt ));
 	    ++start;
 	    for ( lpt = start; *lpt!='\0' && *lpt!=']'; ++lpt );
 	    if ( *lpt!=']' )
-return( my_asprintf( _("Unterminated coverage table, starting at: %.20s..."), start-1 ));
+return( xasprintf( _("Unterminated coverage table, starting at: %.20s..."), start-1 ));
 	    end = lpt++;
 	    if ( do_replacements==1 ) {
 		int rcnt, ecnt;
 		do_replacements = 2;
 		if ( cnt==0 )
-return( my_asprintf( _("Replacements must follow the coverage table to which they apply: %s"), start-4 ));
+return( xasprintf( _("Replacements must follow the coverage table to which they apply: %s"), start-4 ));
 		ch = *end; *end = '\0';
 		parsed[cnt].replacements = copy(start);
 		*end = ch;
@@ -4772,7 +4782,7 @@ return( my_asprintf( _("Replacements must follow the coverage table to which the
 		    free(parsed[cnt].replacements);
 		    parsed[cnt].replacements = newr;
 		} else
-return( my_asprintf( _("There must be as many replacement glyphs as there are match glyphs: %s => %s"),
+return( xasprintf( _("There must be as many replacement glyphs as there are match glyphs: %s => %s"),
 		    parsed[cnt].entity, parsed[cnt].replacements));
     continue;
 	    }
@@ -4784,39 +4794,39 @@ return( my_asprintf( _("There must be as many replacement glyphs as there are ma
 	} else if ( *start=='=' && start[1]=='>' ) {
 	    /* A reverse contextual chaining */
 	    if ( fpst->format!=pst_reversecoverage )
-return( my_asprintf( _("No replacement lists may be specified in this contextual lookup, use a nested lookup instead, starting at: %.20s..."), lpt ));
+return( xasprintf( _("No replacement lists may be specified in this contextual lookup, use a nested lookup instead, starting at: %.20s..."), lpt ));
 	    if ( do_replacements )
-return( my_asprintf( _("Only one replacement list may be specified in a reverse contextual chaining lookup, starting at: %.20s..."), lpt ));
+return( xasprintf( _("Only one replacement list may be specified in a reverse contextual chaining lookup, starting at: %.20s..."), lpt ));
 	    do_replacements = true;
 	    lpt += 2;
 	} else {
 	    /* A lookup invocation */
 	    if ( fpst->format==pst_reversecoverage )
-return( my_asprintf( _("No lookups may be specified in a reverse contextual lookup (use a replacement list instead), starting at: %.20s..."), lpt ));
+return( xasprintf( _("No lookups may be specified in a reverse contextual lookup (use a replacement list instead), starting at: %.20s..."), lpt ));
 
 	    if ( *start=='@' ) {
 		for ( lpt=start+1; isspace( *lpt ); ++lpt );
 		if ( *lpt!='<' )
-return( my_asprintf( _("A lookup invocation must be started by the sequence '@<' and ended with '>', starting at: %.20s..." ), start ) );
+return( xasprintf( _("A lookup invocation must be started by the sequence '@<' and ended with '>', starting at: %.20s..." ), start ) );
 	    }
 	    start= ++lpt;
 	    for ( lpt = start; *lpt!='\0' && *lpt!='>'; ++lpt );
 	    if ( *lpt!='>' )
-return( my_asprintf( _("Unterminated lookup invocation, starting at: %.20s..."), start-1 ));
+return( xasprintf( _("Unterminated lookup invocation, starting at: %.20s..."), start-1 ));
 	    *lpt = '\0';
 	    lookup = SFFindLookup(sf,start);
 	    if ( lookup==NULL ) {
-		ret = my_asprintf( _("Unknown lookup: %s"), start );
+		ret = xasprintf( _("Unknown lookup: %s"), start );
 		*lpt = '>';
 return( ret );
 	    } else if ( (isgpos && lookup->lookup_type<gpos_start) || (!isgpos && lookup->lookup_type>gpos_start)) {
-		ret = my_asprintf( isgpos ? _("GSUB lookup refered to in this GPOS contextual lookup: %s"):
+		ret = xasprintf( isgpos ? _("GSUB lookup refered to in this GPOS contextual lookup: %s"):
 			    _("GPOS lookup refered to in this GSUB contextual lookup: %s"),
 			start );
 		*lpt = '>';
 return( ret );
 	    } else if ( cnt==0 ) {
-		ret = my_asprintf( _("Lookups must follow the glyph, class or coverage table to which they apply: %s"), start );
+		ret = xasprintf( _("Lookups must follow the glyph, class or coverage table to which they apply: %s"), start );
 		*lpt = '>';
 return( ret );
 	    }
@@ -4883,7 +4893,7 @@ return( copy( _("A reverse contextual chaining lookup can only match one coverag
 	for ( i=0; i<cnt; ++i ) {
 	    if ( SFGetChar(sf,-1,parsed[i].entity)==NULL ) {
 		if ( ret==NULL ) {
-		    ret = my_asprintf( _("There is no glyph named \"%s\" in the font."), parsed[i].entity );
+		    ret = xasprintf( _("There is no glyph named \"%s\" in the font."), parsed[i].entity );
 		    *return_is_warning = true;
 		}
 	    }
@@ -4960,11 +4970,11 @@ return( copy( _("A reverse contextual chaining lookup can only match one coverag
 		free( rule->u.class.fclasses ); rule->u.class.fclasses = NULL;
 		rule->u.class.bcnt = rule->u.class.fcnt = rule->u.class.ncnt = 0;
 		if ( i<first )
-return( my_asprintf( _("%s is not a class name for the backtracking classes." ), parsed[i].entity ) );
+return( xasprintf( _("%s is not a class name for the backtracking classes." ), parsed[i].entity ) );
 		else if ( i<=last )
-return( my_asprintf( _("%s is not a class name for the matching classes." ), parsed[i].entity ) );
+return( xasprintf( _("%s is not a class name for the matching classes." ), parsed[i].entity ) );
 		else
-return( my_asprintf( _("%s is not a class name for the forward classes." ), parsed[i].entity ) );
+return( xasprintf( _("%s is not a class name for the forward classes." ), parsed[i].entity ) );
 	    }
 	    if ( i<first )
 		rule->u.class.bclasses[first-1-i] = j;	/* Reverse the backtrack classes */
@@ -4987,7 +4997,7 @@ return( my_asprintf( _("%s is not a class name for the forward classes." ), pars
 		ch = *lpt; *lpt='\0';
 		if ( SFGetChar(sf,-1,start)==NULL ) {
 		    if ( ret==NULL ) {
-			ret = my_asprintf( _("There is no glyph named \"%s\" in the font."), start );
+			ret = xasprintf( _("There is no glyph named \"%s\" in the font."), start );
 			*return_is_warning = true;
 		    }
 		}

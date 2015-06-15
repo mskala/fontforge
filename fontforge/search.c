@@ -31,24 +31,18 @@
 #include "search.h"
 
 static int CoordMatches(real real_off, real search_off, SearchData *s) {
-    real fudge;
     if ( real_off >= search_off-s->fudge && real_off <= search_off+s->fudge )
 return( true );
-    fudge = s->fudge_percent*search_off;
-    if ( fudge<0 ) fudge = -fudge;
-    if ( real_off >= search_off-fudge && real_off <= search_off+fudge )
-return( true );
-return( false );
+    real fudge = fabs(s->fudge_percent*search_off);
+    return real_off >= search_off-fudge && real_off <= search_off+fudge;
 }
 
 static int BPMatches(BasePoint *sc_p1,BasePoint *sc_p2,BasePoint *p_p1,BasePoint *p_p2,
 	int flip,real rot, real scale,SearchData *s) {
-    real sxoff, syoff, pxoff, pyoff;
-
-    sxoff = sc_p1->x-sc_p2->x;
-    syoff = sc_p1->y-sc_p2->y;
-    pxoff = p_p1->x-p_p2->x;
-    pyoff = p_p1->y-p_p2->y;
+    real sxoff = sc_p1->x-sc_p2->x;
+    real syoff = sc_p1->y-sc_p2->y;
+    real pxoff = p_p1->x-p_p2->x;
+    real pyoff = p_p1->y-p_p2->y;
     if ( flip&1 )
 	sxoff = -sxoff;
     if ( flip&2 )
@@ -311,9 +305,6 @@ return( false );
 return( false );
 	    if ( s->tryrotate && s->endpoints && np_sp->next == NULL ) {
 		int xsign = (flip&1)?-1:1, ysign=(flip&2)?-1:1;
-		SplinePoint *sc_prevsp;
-		/* if ( sc_sp->prev==NULL )*/	/* Already checked this above */
-		sc_prevsp = sc_sp->prev->from;
 		if ( !p_sp->noprevcp ) {
 		    rot = atan2(xsign*(sc_sp->me.y-sc_sp->prevcp.y),ysign*(sc_sp->me.x-sc_sp->prevcp.x)) -
 			  atan2(        p_sp->me.y- p_sp->prevcp.y,         p_sp->me.x- p_sp->prevcp.x);
@@ -763,7 +754,7 @@ static SplinePoint *RplInsertSP(SplinePoint *after,SplinePoint *nrpl,SplinePoint
 return( new );
 }
 
-static void FudgeFigure(SplineChar *sc,SearchData *s,SplineSet *path,BasePoint *fudge) {
+static void FudgeFigure(SearchData *s,SplineSet *path,BasePoint *fudge) {
     SplinePoint *search, *searchrel, *found, *foundrel;
     real xoff, yoff;
 
@@ -809,7 +800,7 @@ static void DoReplaceIncomplete(SplineChar *sc,SearchData *s) {
     }
 
     /* Total "fudge" amount should be spread evenly over each point */
-    FudgeFigure(sc,s,path,&fudge);
+    FudgeFigure(s,path,&fudge);
     if ( s->pointcnt!=s->rpointcnt )
 	MinimumDistancesFree(sc->md); sc->md = NULL;
 
@@ -1369,7 +1360,7 @@ return( NULL );
 /*  go through a similar process to the above */
 
 static SplineChar *RC_MakeNewGlyph(FontViewBase *fv,SplineChar *base, int index,
-	char *reason, char *morereason) {
+	const char *reason, const char *morereason) {
     char *namebuf;
     SplineFont *sf = fv->sf;
     int enc;

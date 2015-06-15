@@ -1247,7 +1247,7 @@ static void FillImages(uint8 *bytemap,EdgeList *es,ImageList *img,Layer *layer,
 		else if ( base->image_type==it_index ) {
 		    col = (base->data + ii*base->bytes_per_line)[jj];
 		    col = base->clut->clut[col];
-		} else if ( layer->dofill && base->trans!=-1) {		/* Equivalent to imagemask */
+		} else if ( layer->dofill && base->trans!=(Color)-1) {		/* Equivalent to imagemask */
 		    if ( (base->trans==0 && !( (base->data + ii*base->bytes_per_line)[jj>>3]&(0x80>>(jj&7)) ) ) ||
 			    (base->trans!=0 && ( (base->data + ii*base->bytes_per_line)[jj>>3]&(0x80>>(jj&7)) ) ))
 	    continue;	/* transparent */
@@ -1457,7 +1457,7 @@ BDFFont *SplineFontToBDFHeader(SplineFont *_sf, int pixelsize, int indicate) {
 	strcpy(aa,_("Generating bitmap font"));
 	if ( sf->fontname!=NULL ) {
 	    strcat(aa,": ");
-	    strncat(aa,sf->fontname,sizeof(aa)-strlen(aa));
+	    strncat(aa,sf->fontname,sizeof(aa)-strlen(aa)-1);
 	    aa[sizeof(aa)-1] = '\0';
 	}
 	ff_progress_start_indicator(10,_("Rasterizing..."),
@@ -1740,13 +1740,24 @@ BDFFont *SplineFontPieceMeal(SplineFont *sf,int layer,int ptsize,int dpi,
 	if ( bb.minx<-10*(sf->ascent+sf->descent) ) bb.minx = -2*(sf->ascent+sf->descent);
 	scale = pixelsize/ (real) (bb.maxy-bb.miny);
 	bdf->ascent = rint(bb.maxy*scale);
-	truesize = rint( (sf->ascent+sf->descent)*scale );
-	if ( pixelsize!=0 )
-	    ptsize = rint( ptsize*(double) truesize/pixelsize );
     } else {
-	scale = pixelsize / (real) (sf->ascent+sf->descent);
-	bdf->ascent = rint(sf->ascent*scale);
+	real ascent = sf->pfminfo.os2_typoascent;
+	real descent = sf->pfminfo.os2_typodescent;
+	ascent += sf->pfminfo.typoascent_add ? sf->ascent : 0;
+	descent -= sf->pfminfo.typodescent_add ? sf->descent: 0;
+	// 1.2 is just an arbitrary value to make the glyph look less tightly fit
+	// in the font view.
+	ascent *= 1.2;
+	descent *= 1.2;
+
+	scale = pixelsize / (real) (ascent - descent);
+	bdf->ascent = rint (ascent * scale);
     }
+
+    truesize = rint ((sf->ascent + sf->descent) * scale);
+    if (pixelsize != 0)
+	ptsize = rint (ptsize * (double) truesize / pixelsize);
+
     if ( flags&pf_ft_nohints )
     {
 	bdf->unhinted_freetype = true;

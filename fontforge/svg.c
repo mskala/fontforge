@@ -77,10 +77,10 @@ static int svg_outfontheader(FILE *file, SplineFont *sf,int layer) {
 	latin1ToUtf8Out(file,sf->comments);
 	fprintf( file, "\n-->\n" );
     }
-    fprintf( file, "<svg>\n" );
+    fprintf( file, "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" version=\"1.1\">\n" );
     time(&now);
     fprintf( file, "<metadata>\nCreated by FontForge %d at %s",
-	    library_version_configuration.library_source_versiondate, ctime(&now) );
+	    FONTFORGE_VERSIONDATE_RAW, ctime(&now) );
     if ( author!=NULL )
 	fprintf(file," By %s\n", author);
     else
@@ -219,9 +219,9 @@ return( lineout );
 }
 
 static void svg_dumpstroke(FILE *file, struct pen *cpen, struct pen *fallback,
-	char *scname, SplineChar *nested, int layer, int istop) {
-    static char *joins[] = { "miter", "round", "bevel", "inherit", NULL };
-    static char *caps[] = { "butt", "round", "square", "inherit", NULL };
+	const char *scname, SplineChar *nested, int layer, int istop) {
+    static const char *joins[] = { "miter", "round", "bevel", "inherit", NULL };
+    static const char *caps[] = { "butt", "round", "square", "inherit", NULL };
     struct pen pen;
 
     pen = *cpen;
@@ -252,10 +252,10 @@ static void svg_dumpstroke(FILE *file, struct pen *cpen, struct pen *fallback,
 	else
 	    fprintf( file, "stroke=\"currentColor\" " );
 	if ( pen.brush.opacity>=0 )
-	    fprintf( file, "stroke-opacity=\"%g\" ", pen.brush.opacity);
+	    fprintf( file, "stroke-opacity=\"%g\" ", (double)pen.brush.opacity);
     }
     if ( pen.width!=WIDTH_INHERITED )
-	fprintf( file, "stroke-width=\"%g\" ", pen.width );
+	fprintf( file, "stroke-width=\"%g\" ", (double)pen.width );
     if ( pen.linecap!=lc_inherited )
 	fprintf( file, "stroke-linecap=\"%s\" ", caps[pen.linecap] );
     if ( pen.linejoin!=lc_inherited )
@@ -284,7 +284,7 @@ static void svg_dumpstroke(FILE *file, struct pen *cpen, struct pen *fallback,
 }
 
 static void svg_dumpfill(FILE *file, struct brush *cbrush, struct brush *fallback,
-	int dofill, char *scname, SplineChar *nested, int layer, int istop ) {
+	int dofill, const char *scname, SplineChar *nested, int layer, int istop ) {
     struct brush brush;
 
     if ( !dofill ) {
@@ -315,7 +315,7 @@ return;
 	else
 	    fprintf( file, "fill=\"currentColor\" " );
 	if ( brush.opacity>=0 )
-	    fprintf( file, "fill-opacity=\"%g\" ", brush.opacity);
+	    fprintf( file, "fill-opacity=\"%g\" ", (double)brush.opacity);
     }
 }
 
@@ -357,7 +357,7 @@ static int base64tab[] = {
 };
 
 static void DataURI_ImageDump(FILE *file,struct gimage *img) {
-    char *mimetype=NULL;
+    const char *mimetype=NULL;
     FILE *imgf;
     int done = false;
     int threechars[3], fourchars[4], i, ch, ch_on_line;
@@ -423,7 +423,7 @@ static void DataURI_ImageDump(FILE *file,struct gimage *img) {
 }
 
 static void svg_dumpgradient(FILE *file,struct gradient *gradient,
-	char *scname,SplineChar *nested,int layer,int is_fill) {
+	const char *scname,SplineChar *nested,int layer,int is_fill) {
     int i;
     Color csame; float osame;
 
@@ -453,20 +453,20 @@ static void svg_dumpgradient(FILE *file,struct gradient *gradient,
 		gradient->sm == sm_reflect ? "reflect" :
 		"repeat" );
 
-    csame = -1; osame = -1;
+    csame = (Color)-1; osame = -1;
     for ( i=0; i<gradient->stop_cnt; ++i ) {
-	if ( csame==-1 )
+	if ( csame==(Color)-1 )
 	    csame = gradient->grad_stops[i].col;
 	else if ( csame!=gradient->grad_stops[i].col )
-	    csame = -2;
-	if ( osame==-1 )
+	    csame = (Color)-2;
+	if ( osame== -1 )
 	    osame = gradient->grad_stops[i].opacity;
-	else if ( osame!=gradient->grad_stops[i].opacity )
+	else if ( (double)osame!=gradient->grad_stops[i].opacity )
 	    osame = -2;
     }
     for ( i=0; i<gradient->stop_cnt; ++i ) {
 	fprintf( file, "      <stop offset=\"%g\"", (double) gradient->grad_stops[i].offset );
-	if ( csame==-2 ) {
+	if ( csame==(Color)-2 ) {
 	    if ( gradient->grad_stops[i].col==COLOR_INHERITED )
 		fprintf( file, " stop-color=\"inherit\"" );
 	    else
@@ -483,11 +483,11 @@ static void svg_dumpgradient(FILE *file,struct gradient *gradient,
     fprintf( file, "    </%s>\n", gradient->radius==0 ? "linearGradient" : "radialGradient" );
 }
 
-static void svg_dumpscdefs(FILE *file,SplineChar *sc,char *name,int istop);
-static void svg_dumptype3(FILE *file,SplineChar *sc,char *name,int istop);
+static void svg_dumpscdefs(FILE *file,SplineChar *sc,const char *name,int istop);
+static void svg_dumptype3(FILE *file,SplineChar *sc,const char *name,int istop);
 
 static void svg_dumppattern(FILE *file,struct pattern *pattern,
-	char *scname, SplineChar *base,SplineChar *nested,int layer,int is_fill) {
+	const char *scname, SplineChar *base,SplineChar *nested,int layer,int is_fill) {
     SplineChar *pattern_sc = SFGetChar(base->parent,-1,pattern->pattern);
     char *patsubname = NULL;
 
@@ -527,7 +527,7 @@ static void svg_dumppattern(FILE *file,struct pattern *pattern,
 }
 
 static void svg_layer_defs(FILE *file, SplineSet *splines,struct brush *fill_brush,struct pen *stroke_pen,
-	SplineChar *sc, char *scname, SplineChar *nested, int layer, int istop ) {
+	SplineChar *sc, const char *scname, SplineChar *nested, int layer, int istop ) {
     if ( SSHasClip(splines)) {
 	if ( nested==NULL )
 	    fprintf( file, "    <clipPath id=\"%s-ly%d-clip\">\n", scname, layer );
@@ -548,7 +548,7 @@ static void svg_layer_defs(FILE *file, SplineSet *splines,struct brush *fill_bru
 	svg_dumppattern(file,stroke_pen->brush.pattern,scname,sc,nested,layer,false);
 }
 
-static void svg_dumpscdefs(FILE *file,SplineChar *sc,char *name,int istop) {
+static void svg_dumpscdefs(FILE *file,SplineChar *sc,const char *name,int istop) {
     int i, j;
     RefChar *ref;
 
@@ -564,7 +564,7 @@ static void svg_dumpscdefs(FILE *file,SplineChar *sc,char *name,int istop) {
     }
 }
 
-static void svg_dumptype3(FILE *file,SplineChar *sc,char *name,int istop) {
+static void svg_dumptype3(FILE *file,SplineChar *sc,const char *name,int istop) {
     int i, j;
     RefChar *ref;
     ImageList *images;
@@ -624,7 +624,7 @@ static void svg_dumptype3(FILE *file,SplineChar *sc,char *name,int istop) {
     }
 }
 
-static void svg_scpathdump(FILE *file, SplineChar *sc,char *endpath,int layer) {
+static void svg_scpathdump(FILE *file, SplineChar *sc,const char *endpath,int layer) {
     RefChar *ref;
     int lineout;
     int i,j;
@@ -872,21 +872,25 @@ static void svg_dumpkerns(FILE *file,SplineFont *sf,int isv) {
     }
 
     for ( kc=isv ? sf->vkerns : sf->kerns; kc!=NULL; kc=kc->next ) {
-	for ( i=1; i<kc->first_cnt; ++i ) for ( j=1; j<kc->second_cnt; ++j ) {
-	    if ( kc->offsets[i*kc->second_cnt+j]!=0 &&
-		    *kc->firsts[i]!='\0' && *kc->seconds[j]!='\0' ) {
-		fprintf( file, isv ? "    <vkern g1=\"" : "    <hkern g1=\"" );
-		fputkerns( file, kc->firsts[i]);
-		fprintf( file, "\"\n\tg2=\"" );
-		fputkerns( file, kc->seconds[j]);
-		fprintf( file, "\"\n\tk=\"%d\" />\n",
-			-kc->offsets[i*kc->second_cnt+j]);
-	    }
-	}
+        for ( i=0; i<kc->first_cnt; ++i ) {
+            if ( kc->firsts[i] && *kc->firsts[i]!='\0' ) {
+                for ( j=0; j<kc->second_cnt; ++j ) {
+                    if ( kc->seconds[j] && *kc->seconds[j]!='\0' &&
+                         kc->offsets[i*kc->second_cnt+j]!=0 ) {
+                        fprintf( file, isv ? "    <vkern g1=\"" : "    <hkern g1=\"" );
+                        fputkerns( file, kc->firsts[i]);
+                        fprintf( file, "\"\n\tg2=\"" );
+                        fputkerns( file, kc->seconds[j]);
+                        fprintf( file, "\"\n\tk=\"%d\" />\n",
+                                -kc->offsets[i*kc->second_cnt+j]);
+                    }
+                }
+            }
+        }
     }
 }
 
-static void svg_outfonttrailer(FILE *file,SplineFont *sf) {
+static void svg_outfonttrailer(FILE *file) {
     fprintf(file,"  </font>\n");
     fprintf(file,"</defs></svg>\n" );
 }
@@ -922,12 +926,10 @@ return( uni==-1 || uni>=0x10000 ||
 
 static void svg_sfdump(FILE *file,SplineFont *sf,int layer) {
     int defwid, i, formeduni;
-    char oldloc[25];
     struct altuni *altuni;
 
-    strncpy( oldloc,setlocale(LC_NUMERIC,NULL),24 );
-    oldloc[24]=0;
-    setlocale(LC_NUMERIC,"C");
+    locale_t tmplocale; locale_t oldlocale; // Declare temporary locale storage.
+    switch_to_c_locale(&tmplocale, &oldlocale); // Switch to the C locale temporarily and cache the old locale.
 
     for ( i=0; i<sf->glyphcnt; ++i ) if ( sf->glyphs[i]!=NULL )
 	sf->glyphs[i]->ticked = false;
@@ -988,11 +990,11 @@ static void svg_sfdump(FILE *file,SplineFont *sf,int layer) {
     }
     svg_dumpkerns(file,sf,false);
     svg_dumpkerns(file,sf,true);
-    svg_outfonttrailer(file,sf);
-    setlocale(LC_NUMERIC,oldloc);
+    svg_outfonttrailer(file);
+    switch_to_old_locale(&tmplocale, &oldlocale); // Switch to the cached locale.
 }
 
-int _WriteSVGFont(FILE *file,SplineFont *sf,enum fontformat format,int flags,
+int _WriteSVGFont(FILE *file,SplineFont *sf,int flags,
 	EncMap *map,int layer) {
     int ret;
 
@@ -1003,7 +1005,7 @@ int _WriteSVGFont(FILE *file,SplineFont *sf,enum fontformat format,int flags,
 return( ret );
 }
 
-int WriteSVGFont(char *fontname,SplineFont *sf,enum fontformat format,int flags,
+int WriteSVGFont(const char *fontname,SplineFont *sf,enum fontformat format,int flags,
 	EncMap *map,int layer) {
     FILE *file;
     int ret;
@@ -1027,7 +1029,7 @@ return( ret );
 }
 
 int _ExportSVG(FILE *svg,SplineChar *sc,int layer) {
-    char oldloc[24], *end;
+    char *end;
     int em_size;
     DBounds b;
 
@@ -1038,11 +1040,11 @@ int _ExportSVG(FILE *svg,SplineChar *sc,int layer) {
     if ( b.miny>-sc->parent->descent ) b.miny = -sc->parent->descent;
     if ( b.maxy<em_size ) b.maxy = em_size;
 
-    strcpy( oldloc,setlocale(LC_NUMERIC,NULL) );
-    setlocale(LC_NUMERIC,"C");
+    locale_t tmplocale; locale_t oldlocale; // Declare temporary locale storage.
+    switch_to_c_locale(&tmplocale, &oldlocale); // Switch to the C locale temporarily and cache the old locale.
     fprintf(svg, "<?xml version=\"1.0\" standalone=\"no\"?>\n" );
     fprintf(svg, "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\" >\n" );
-    fprintf(svg, "<svg viewBox=\"%d %d %d %d\">\n",
+    fprintf(svg, "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" version=\"1.1\" viewBox=\"%d %d %d %d\">\n",
 	    (int) floor(b.minx), (int) floor(b.miny),
 	    (int) ceil(b.maxx), (int) ceil(b.maxy));
     fprintf(svg, "  <g transform=\"matrix(1 0 0 -1 0 %d)\">\n",
@@ -1058,7 +1060,7 @@ int _ExportSVG(FILE *svg,SplineChar *sc,int layer) {
     fprintf(svg, "  </g>\n\n" );
     fprintf(svg, "</svg>\n" );
 
-    setlocale(LC_NUMERIC,oldloc);
+    switch_to_old_locale(&tmplocale, &oldlocale); // Switch to the cached locale.
 return( !ferror(svg));
 }
 
@@ -1066,44 +1068,8 @@ return( !ferror(svg));
 /* *****************************    SVG Input    **************************** */
 /* ************************************************************************** */
 
-#ifdef _NO_LIBXML
-int HasSVG(void) {
-return( false );
-}
-
-SplineFont *SFReadSVG(char *filename, int flags) {
-return( NULL );
-}
-
-char **NamesReadSVG(char *filename) {
-return( NULL );
-}
-
-SplineSet *SplinePointListInterpretSVG(char *filename,char *memory, int memlen,
-	int em_size,int ascent,int is_stroked) {
-return( NULL );
-}
-#else
-
-#ifndef HAVE_ICONV_H
-# undef iconv
-# undef iconv_t
-# undef iconv_open
-# undef iconv_close
-#endif
-
 #undef extended			/* used in xlink.h */
 #include <libxml/parser.h>
-
-#ifdef __CygWin
-/*
- * FIXME: Check whether this kludge is still (a) necessary, (b)
- * functional. At least (a) seems unlikely to have remained true over
- * time.
- */
-/* Nasty kludge, but xmlFree doesn't work on cygwin (or I can't get it to) */
-# define xmlFree free
-#endif
 
 static int libxml_init_base() {
 return( true );
@@ -1411,8 +1377,9 @@ static SplineSet *SVGParsePath(xmlChar *path) {
 
     while ( *path ) {
 	while ( *path==' ' ) ++path;
-	while ( isalpha(*path))
-	    type = *path++;
+        if ( isalpha(*path)) {
+            type = *path++;
+        }
 	if ( *path=='\0' && type!='z' && type!='Z' )
     break;
 	if ( type=='m' || type=='M' ) {
@@ -1424,8 +1391,7 @@ static SplineSet *SVGParsePath(xmlChar *path) {
 		    cur->first->prev = cur->last->prev;
 		    cur->first->prev->to = cur->first;
 		    SplinePointFree(cur->last);
-		} else
-		    SplineMake(cur->last,cur->first,order2);
+		}
 		cur->last = cur->first;
 	    }
 	    x = strtod((char *) path,&end);
@@ -1832,30 +1798,37 @@ return( NULL );
     if ( rx<0 ) rx = -rx;
     if ( ry<0 ) ry = -ry;
 
+    /* a magic number to make cubic beziers approximate ellipses    */
+    /*            4/3 * ( sqrt(2) - 1 ) = 0.55228...                */
+    /*   also     4/3 * tan(t/4)   where t = 90 b/c we do 4 curves  */
+    double magic = 0.5522847498307933984022516322796;
+    /* offset from on-curve point to control points                 */
+    double drx = rx * magic;
+    double dry = ry * magic;
     cur = chunkalloc(sizeof(SplineSet));
     cur->first = SplinePointCreate(cx-rx,cy);
-    cur->last = SplinePointCreate(cx,cy+ry);
-    cur->first->nextcp.x = cx-rx; cur->first->nextcp.y = cy+ry;
-    cur->last->prevcp = cur->first->nextcp;
+    cur->first->nextcp.x = cx-rx; cur->first->nextcp.y = cy+dry;
+    cur->first->prevcp.x = cx-rx; cur->first->prevcp.y = cy-dry;
     cur->first->noprevcp = cur->first->nonextcp = false;
+    cur->last = SplinePointCreate(cx,cy+ry);
+    cur->last->prevcp.x = cx-drx; cur->last->prevcp.y = cy+ry;
+    cur->last->nextcp.x = cx+drx; cur->last->nextcp.y = cy+ry;
     cur->last->noprevcp = cur->last->nonextcp = false;
-    SplineMake(cur->first,cur->last,true);
+    SplineMake(cur->first,cur->last,false);
     sp = SplinePointCreate(cx+rx,cy);
-    sp->prevcp.x = cx+rx; sp->prevcp.y = cy+ry;
-    sp->nextcp.x = cx+rx; sp->nextcp.y = cy-ry;
+    sp->prevcp.x = cx+rx; sp->prevcp.y = cy+dry;
+    sp->nextcp.x = cx+rx; sp->nextcp.y = cy-dry;
     sp->nonextcp = sp->noprevcp = false;
-    cur->last->nextcp = sp->prevcp;
-    SplineMake(cur->last,sp,true);
+    SplineMake(cur->last,sp,false);
     cur->last = sp;
     sp = SplinePointCreate(cx,cy-ry);
-    sp->prevcp = cur->last->nextcp;
-    sp->nextcp.x = cx-rx; sp->nextcp.y = cy-ry;
+    sp->prevcp.x = cx+drx; sp->prevcp.y = cy-ry;
+    sp->nextcp.x = cx-drx; sp->nextcp.y = cy-ry;
     sp->nonextcp = sp->noprevcp = false;
-    cur->first->prevcp = sp->nextcp;
-    SplineMake(cur->last,sp,true);
-    SplineMake(sp,cur->first,true);
+    SplineMake(cur->last,sp,false);
+    SplineMake(sp,cur->first,false);
     cur->last = cur->first;
-return( cur );
+    return( cur );
 }
 
 static SplineSet *SVGParsePoly(xmlNodePtr poly, int isgon) {
@@ -2809,7 +2782,7 @@ return( NULL );
     if ( head==NULL )
 return( NULL );
 
-    SPLCatagorizePoints(head);
+    SPLCategorizePoints(head);
 
     eret = EntityCreate(SplinePointListTransform(head,st.transform,tpt_AllPoints), &st);
     if ( fill_colour_source!=NULL || stroke_colour_source!=NULL )
@@ -2821,7 +2794,7 @@ return( eret );
 static Entity *SVGParseSVG(xmlNodePtr svg,int em_size,int ascent) {
     struct svg_state st;
     char *num, *end;
-    double x,y,swidth,sheight,width=1,height=1;
+    double swidth,sheight,width=1,height=1;
 
     memset(&st,0,sizeof(st));
     st.lc = lc_inherited;
@@ -2852,8 +2825,8 @@ static Entity *SVGParseSVG(xmlNodePtr svg,int em_size,int ascent) {
     if ( width<=0 ) width = 1;
     num = (char *) xmlGetProp(svg,(xmlChar *) "viewBox");
     if ( num!=NULL ) {
-	x = strtod((char *) num,&end);
-	y = strtod((char *) end+1,&end);
+	/* x = */strtod((char *) num,&end);
+	/* y = */strtod((char *) end+1,&end);
 	swidth = strtod((char *) end+1,&end);
 	sheight = strtod((char *) end+1,&end);
 	xmlFree(num);
@@ -2888,7 +2861,7 @@ static void SVGParseGlyphBody(SplineChar *sc, xmlNodePtr glyph,int *flags) {
 	else sc->parent->multilayer = true;
     }
 
-    SCCatagorizePoints(sc);
+    SCCategorizePoints(sc);
 }
 
 static SplineChar *SVGParseGlyphArgs(xmlNodePtr glyph,int defh, int defv,
@@ -2901,6 +2874,7 @@ static SplineChar *SVGParseGlyphArgs(xmlNodePtr glyph,int defh, int defv,
     name = xmlGetProp(glyph,(xmlChar *) "horiz-adv-x");
     if ( name!=NULL ) {
 	sc->width = strtod((char *) name,NULL);
+        sc->widthset = true;
 	xmlFree(name);
     } else
 	sc->width = defh;
@@ -3080,7 +3054,7 @@ static char *SVGGetNames(SplineFont *sf,xmlChar *g,xmlChar *utf8,SplineChar **sc
 	    temp = SFGetChar(sf,u[i],NULL);
 	    if ( temp!=NULL ) {
 		if ( *sc==NULL ) *sc = temp;
-		len = strlen(temp->name)+1;
+		len += strlen(temp->name)+1;
 	    }
 	}
     }
@@ -3570,16 +3544,17 @@ void SFSetOrder(SplineFont *sf,int order2) {
 void SFLSetOrder(SplineFont *sf, int layerdest, int order2) {
     int i;
 
-    for ( i=0; i<sf->glyphcnt; ++i ) if ( sf->glyphs[i]!=NULL ) {
-	    SPLSetOrder(sf->glyphs[i]->layers[layerdest].splines,order2);
+    for ( i=0; i<sf->glyphcnt; ++i )
+      if ( sf->glyphs[i]!=NULL && layerdest < sf->glyphs[i]->layer_cnt) {
+	    if (sf->glyphs[i]->layers[layerdest].splines != NULL)
+	      SPLSetOrder(sf->glyphs[i]->layers[layerdest].splines,order2);
 	    sf->glyphs[i]->layers[layerdest].order2 = order2;
-    }
+      }
 }
 
 static SplineFont *_SFReadSVG(xmlDocPtr doc, char *filename) {
     xmlNodePtr *fonts, font;
     SplineFont *sf;
-    char oldloc[25];
     char *chosenname = NULL;
 
     fonts = FindSVGFontNodes(doc);
@@ -3599,11 +3574,10 @@ return( NULL );
 	}
     }
     free(fonts);
-    strncpy( oldloc,setlocale(LC_NUMERIC,NULL),24 );
-    oldloc[24]=0;
-    setlocale(LC_NUMERIC,"C");
+    locale_t tmplocale; locale_t oldlocale; // Declare temporary locale storage.
+    switch_to_c_locale(&tmplocale, &oldlocale); // Switch to the C locale temporarily and cache the old locale.
     sf = SVGParseFont(font);
-    setlocale(LC_NUMERIC,oldloc);
+    switch_to_old_locale(&tmplocale, &oldlocale); // Switch to the cached locale.
     xmlFreeDoc(doc);
 
     if ( sf!=NULL ) {
@@ -3758,4 +3732,3 @@ return( SplinesFromEntities(ret,&flags,is_stroked));
 int HasSVG(void) {
 return( libxml_init_base());
 }
-#endif

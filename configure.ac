@@ -31,6 +31,7 @@
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 AC_PREREQ([2.68])
+
 #--------------------------------------------------------------------------
 # PackageTimestamp version
 m4_define([fontforge_package_stamp], [20140101])
@@ -80,6 +81,12 @@ m4_define([libgutils_info],[libgutils_major_version:libgutils_minor_version:0])
 m4_define([libzmqcollab_info],[libzmqcollab_major_version:libzmqcollab_minor_version:0])
 
 #--------------------------------------------------------------------------
+
+# We need this in order to pass things through automake when it doesn't like them.
+BLANK1=''; AC_SUBST(BLANK1)
+AC_SUBST([BLANK2],[""])
+
+#--------------------------------------------------------------------------
 AC_INIT([fontforge],[fontforge_version],[fontforge-devel@lists.sourceforge.net],
 	[fontforge_package_name],[https://github.com/fontforge/fontforge])
 AC_CONFIG_SRCDIR([Unicode/ArabicForms.c])
@@ -88,7 +95,7 @@ AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_TESTDIR([tests],[fontforge])
 AC_CANONICAL_BUILD
 AC_CANONICAL_HOST
-AC_CONFIG_HEADER([inc/fontforge-config.h])
+AC_CONFIG_HEADERS([config.h inc/fontforge-config.h:config.h])
 AM_INIT_AUTOMAKE([foreign -Wall subdir-objects tar-pax])
 AM_MAINTAINER_MODE([enable])
 AC_USE_SYSTEM_EXTENSIONS
@@ -157,7 +164,6 @@ libpng_url="http://www.libpng.org/"
 libxml_url="http://www.xmlsoft.org/"
 libspiro_url="https://github.com/fontforge/libspiro"
 libuninameslist_url="https://github.com/fontforge/libuninameslist"
-libunicodenames_url="https://bitbucket.org/sortsmill/libunicodenames"
 libzmq_url="http://www.zeromq.org/"
 libreadline_url="http://www.gnu.org/software/readline"
 
@@ -178,15 +184,27 @@ AC_PROG_AWK
 AC_PROG_CC
 AC_PROG_CC_C99
 AM_PROG_CC_C_O
+gl_EARLY
 AC_PROG_CPP
-AC_PROG_CXX
 AC_PROG_GREP
 AC_PROG_INSTALL
 AC_PROG_LN_S
 AC_PROG_MAKE_SET
 AC_PROG_MKDIR_P
 AC_PROG_SED
-PKG_PROG_PKG_CONFIG
+
+#--------------------------------------------------------------------------
+# Required for building FontForge package, plus we use PKG_CHECK_MODULES in
+# a few checks and searches for programs and libraries.
+# NOTE: Some distros don't have /usr/local included in the /etc/ld.so PATH,
+# so, PKG_CHECK_MODULES may not find libraries you compile into /usr/local.
+m4_ifndef([PKG_PROG_PKG_CONFIG],[m4_fatal(
+  [Could not locate the pkg-config autoconf macros.
+   These are usually located in /usr/share/aclocal/pkg.m4. If your macros
+   are in a different location, try setting the environment variable
+   ACLOCAL="aclocal -I/other/macro/dir" before running autoreconf.])])
+PKG_PROG_PKG_CONFIG([0.25])
+
 AC_PATH_PROG([MSGFMT],[msgfmt],[msgfmt])
 AC_PATH_PROG([XGETTEXT],[xgettext],[xgettext])
 AC_PATH_PROG([INDENT],[indent],[indent])
@@ -195,6 +213,24 @@ AC_PATH_PROG([UNZIP],[unzip],[unzip])
 AC_PATH_PROG([UPDATE_MIME_DATABASE],[update-mime-database],[:])
 AC_PATH_PROG([UPDATE_DESKTOP_DATABASE],[update-desktop-database],[:])
 AC_PATH_PROG([PLUTIL],[plutil],[:])
+
+if test "y$HOMEBREW_BREW_FILE" != "y"; then
+   echo "detected a homebrew build environment"
+   PYLIBDIR=$(${HOMEBREW_PREFIX}/bin/python -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")
+   PYPKGCONFIG="$( cd "$PYLIBDIR/../../pkgconfig" && pwd )"
+   export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$PYPKGCONFIG"
+   echo "found python pkg_config information: $PYPKGCONFIG"
+   if [ "y$PYTHON" = y ] ; then 
+     export PYTHON="${HOMEBREW_PREFIX}/bin/python"
+   fi
+fi
+
+AM_PATH_PYTHON([2.7])
+PKG_CHECK_MODULES([PYTHON],[python-"${PYTHON_VERSION}"])
+i_do_have_python_scripting=yes;
+
+dnl###############################
+dnl###############################
 
 AM_CONDITIONAL([XDG_DESKTOP],[test x"$UPDATE_MIME_DATABASE" != "x:" -a x"$UPDATE_DESKTOP_DATABASE" != "x:"])
 
@@ -237,11 +273,6 @@ AC_ARG_ENABLE([freetype-debugger],
                 [i_do_have_freetype_debugger=no])])
 # ' make syntax checkers happy
 
-FONTFORGE_ARG_ENABLE([capslock-for-alt],
-        [AS_HELP_STRING([--enable-capslock-for-alt],
-                [use capslock rather than alt/meta to alter behavior of tools in outline/bitmap windows])],
-        [FONTFORGE_CONFIG_CAPSLOCK_FOR_ALT])
-
 FONTFORGE_ARG_ENABLE([debug-raw-points],
         [AS_HELP_STRING([--enable-debug-raw-points],
                 [add a raw mode to the points window of the debugger])],
@@ -251,16 +282,6 @@ FONTFORGE_ARG_ENABLE([tile-path],
         [AS_HELP_STRING([--enable-tile-path],
                 [enable a 'tile path' command (a variant of 'expand stroke')])],
         [FONTFORGE_CONFIG_TILEPATH])
-
-FONTFORGE_ARG_DISABLE([link-test],
-        [AS_HELP_STRING([--disable-link-test],[disable the link test during build. Handy for cross compiling])],
-        [_NO_FFLINKTEST])
-AM_CONDITIONAL([BUILD_LINK_TEST],[test x"${i_do_have_link_test}" = xyes])
-
-AC_ARG_ENABLE([windows-cross-compile],
-        [AS_HELP_STRING([--enable-windows-cross-compile],
-                [enable cross compile for windows extra support])],
-        [WINDOWS_CROSS_COMPILE=yes])
 
 #--------------------------------------------------------------------------
 # Theme pixmap ICON selection.
@@ -294,16 +315,6 @@ FONTFORGE_ARG_ENABLE([maintainer-tools],
 AM_CONDITIONAL([MAINTAINER_TOOLS],[test x"${i_do_have_maintainer_tools}" = xyes])
 AC_SUBST([MAINTAINER_TOOLS],["${i_do_have_maintainer_tools}"])
 
-# Enable this experimental feature via an obscure cache variable
-# rather than --enable.
-AC_CACHE_CHECK([whether to enable native callbacks (experimental)],
-               [fontforge_cv_native_callbacks],
-               [if test x"${fontforge_cv_native_callbacks}" != yes; then
-                   fontforge_cv_native_callbacks=no
-                fi])
-i_do_have_native_callbacks="${fontforge_cv_native_callbacks}"
-
-
 #--------------------------------------------------------------------------
 #
 # Checks for libraries.
@@ -325,9 +336,9 @@ if test x"${i_do_have_gui}" = xyes; then
    PKG_CHECK_MODULES([PANGO],[pango >= 1.10 pangoxft])
 fi
 
-PKG_CHECK_MODULES([FREETYPE],[freetype2])
+PKG_CHECK_MODULES([FREETYPE],[freetype2 >= 2.3.7])
+PKG_CHECK_MODULES([LIBXML],[libxml-2.0])
 
-FONTFORGE_ARG_WITH_CAIRO
 AC_ARG_VAR([FREETYPE_SOURCE],
         [directory where freetype source code is located for --enable-freetype-debugger;
          however, if --enable-freetype-debugger=DIR is specified, then DIR overrides
@@ -336,33 +347,16 @@ FONTFORGE_ARG_WITH_GIFLIB
 FONTFORGE_ARG_WITH_LIBJPEG
 FONTFORGE_ARG_WITH_LIBPNG
 FONTFORGE_ARG_WITH_LIBTIFF
-FONTFORGE_ARG_WITH_LIBXML
+FONTFORGE_ARG_WITH_CAIRO # do this test only 'after' zlib and png checks
 FONTFORGE_ARG_WITH_LIBSPIRO
 FONTFORGE_ARG_WITH_LIBUNINAMESLIST
-FONTFORGE_ARG_WITH_LIBUNICODENAMES
-FONTFORGE_ARG_WITH_ICONV
+#FONTFORGE_ARG_WITH_LIBUNICODENAMES
 FONTFORGE_ARG_WITH_ZEROMQ
 FONTFORGE_ARG_WITH_LIBREADLINE
 
 if test x"${i_do_have_x}" = xyes; then
-   AC_DEFINE(HAVE_GUI,[1],[Have GUI])
-fi
-if test x"${i_do_have_x}" = xyes; then
    if test x"${i_do_have_libzmq}" = xyes; then
       AC_DEFINE(BUILD_COLLAB,[1],[Build the Collab Code])
-   fi
-fi
-
-# We have both libraries but did not choose which one to use yet
-if test x"${i_do_have_libuninameslist}" = xyes; then
-   if test x"${i_do_have_libunicodenames}" = xyes; then
-      if test x"${i_do_have_libuninamesfun}" = xyes; then
-	  i_do_have_libunicodenames=no
-	  AC_DEFINE(_NO_LIBUNICODENAMES)
-      else
-	  i_do_have_libuninameslist=no
-	  AC_DEFINE(_NO_LIBUNINAMESLIST)
-      fi
    fi
 fi
 
@@ -383,6 +377,7 @@ AC_CHECK_HEADERS([strings.h sys/ioctl.h sys/socket.h sys/time.h unistd.h])
 if test x"${i_do_want_iconv}" = xyes; then
    AC_CHECK_HEADERS([iconv.h])
 fi
+gl_INIT
 
 #--------------------------------------------------------------------------
 #
@@ -395,18 +390,70 @@ AX_PTHREAD
 #--------------------------------------------------------------------------
 # Check to see if "this" compiler can use these flags, errors, or warnings.
 # Enable the flags that can be used and skip flags that are unknown.
+AC_ARG_ENABLE([gcc-warnings],
+  [AS_HELP_STRING([--enable-gcc-warnings],
+                  [turn on lots of GCC warnings (for developers)])],
+  [case $enableval in
+     yes|no) ;;
+     *)      AC_MSG_ERROR([bad value $enableval for gcc-warnings option]) ;;
+   esac
+   gl_gcc_warnings=$enableval],
+  [gl_gcc_warnings=no]
+)
+
+if test "$gl_gcc_warnings" = yes; then
+  gl_WARN_ADD([-Werror], [WERROR_CFLAGS])
+
+  # Set up the list of undesired warnings.
+  nw=
+  nw="$nw -Wundef"            # All compiler preprocessors support #if UNDEF
+  nw="$nw -Wtraditional"      # All compilers nowadays support ANSI C
+  nw="$nw -Wstrict-overflow"  # Use a lower level (see below).
+  nw="$nw -Wconversion"       # These warnings usually don’t point to mistakes.
+  nw="$nw -Wsign-conversion"  # Likewise.
+  nw="$nw -Wtraditional-conversion" # Don't care.
+  nw="$nw -Wpadded"           # Don't care.
+  nw="$nw -Wc++-compat"       # Don't care.
+  nw="$nw -Woverlength-strings" # Don't care.
+  nw="$nw -Wmissing-format-attribute" # Don't care.
+  nw="$nw -Wshadow"           # Don't care.
+  nw="$nw -Wunreachable-code" # Seems buggy.
+  nw="$nw -Wsystem-headers"   # glibc headers fail as of glibc 2.17, gcc 4.8
+  nw="$nw -Wsuggest-attribute=format" # glibc headers fail as of glibc 2.17, gcc 4.8
+  nw="$nw -Wstrict-aliasing"  # -Sep2012, There's a bug in <py3 with Py_True/False that will propagate with GCC's "strict-aliasing" rules.
+  nw="$nw -Wsuggest-attribute=pure" # FIXME: Maybe later?
+  nw="$nw -Wbad-function-cast" # We do this on purpose (e.g. double to int)
+  nw="$nw -Wall"
+  nw="$nw -Wunused-macros"    # those macros might come in handy later
+
+  gl_MANYWARN_ALL_GCC([warnings])
+
+  # Enable all GCC warnings not in this list.
+  gl_MANYWARN_COMPLEMENT([warnings], [$warnings], [$nw])
+  for w in $warnings; do
+    gl_WARN_ADD([$w])
+  done
+
+  # Add an extra warning
+  gl_WARN_ADD([-Wstrict-overflow=1])
+
+  # Add these explicitly: adding -Wfoo to $nw doesn't work in this case
+  gl_WARN_ADD([-Wno-unused-result]) # FIXME: We should in fact use this, but currently it makes too much noise
+  gl_WARN_ADD([-Wno-comment]) # We use /* in comments with good reason
+
+  # Add some more safety measures
+  gl_WARN_ADD([-D_FORTIFY_SOURCE=2])
+  gl_WARN_ADD([-fmudflap])
+
+  # When compiling with GCC, prefer -isystem to -I when including system
+  # include files, to avoid generating useless diagnostics for the files.
+  ISYSTEM='-isystem '
+else
+  ISYSTEM='-I'
+fi
+AC_SUBST([ISYSTEM])
+
 AC_LANG_PUSH([C]) dnl NOTE: configure.ac - try not to push/pop too often
-AC_SUBST([WARNING_CFLAGS],[])
-FFW_FLAGS="-Wunused -Wreturn-type -Wparentheses -Wformat -Wchar-subscripts \
- -Wno-unused-but-set-variable -Wno-unused-result -Wcast-align -Wclobbered  \
- -Werror=missing-prototypes -Werror=pointer-arith -Werror=implicit"
-dnl Sep2012, There's a bug in <py3 with Py_True/False that will propagate
-dnl with GCC's "strict-aliasing" rules. -Wstrict-aliasing
-
-for arg in ${FFW_FLAGS}; do
-   AX_CHECK_COMPILE_FLAG([$arg],[WARNING_CFLAGS+=" $arg"])
-done
-
 # Create LDFLAGS for libraries. Currently used to pass '-no-undefined' to libtool.
 my_lib_ldflags=""
 dnl add --no-undefined if supported. Based on information seen here:
@@ -421,6 +468,11 @@ case $host in
       ;;
    *-apple-darwin*)
       ;;
+   *mingw* | *cygwin*)
+      dnl Explicitly export all symbols on Windows, since FontForge lacks an export table
+	  dnl See issue #1238 on GitHub for more information.
+	  my_lib_ldflags="${my_lib_ldflags} -no-undefined -Wl,--export-all-symbols"
+      ;;
    *) saved_LDFLAGS=$LDFLAGS
       AC_MSG_CHECKING([whether the linker supports --no-undefined])
       LDFLAGS="$saved_LDFLAGS -Wl,--no-undefined"
@@ -433,6 +485,15 @@ case $host in
       ;;
 esac
 AC_SUBST([MY_LIB_LDFLAGS], [${my_lib_ldflags}])
+
+# Native Windows Python modules have a '.pyd' extension and not '.dll'
+pyhook_file_extension=""
+case $host in
+    *mingw*)
+        pyhook_file_extension="${pyhook_file_extension} -shrext \".pyd\""
+    ;;
+esac
+AC_SUBST([PYHOOK_FILE_EXTENSION], [${pyhook_file_extension}])
 
 AC_LANG_POP
 
@@ -449,28 +510,24 @@ m4_define([AN_FUNCTION], [m4_if([$1], [realloc], [],
 #--------------------------------------------------------------------------
 # Checks for library functions.
 
-AC_FUNC_ERROR_AT_LINE
 AC_FUNC_FORK
 AC_FUNC_MKTIME
 AC_FUNC_MMAP
 if test x"${ac_cv_func_mmap_fixed_mapped}" != xyes; then
    AC_DEFINE([_NO_MMAP],1,[Define if not using mmap.])
 fi
-AC_FUNC_STRCOLL
-AC_FUNC_STRTOD
-AC_CHECK_FUNCS([alarm atexit dup2 endpwent])
+AC_CHECK_FUNCS([alarm dup2 endpwent])
 AC_CHECK_FUNCS([getcwd gethostbyname gettimeofday])
 AC_CHECK_FUNCS([mkdir munmap])
 AC_CHECK_FUNCS([nl_langinfo putenv rmdir])
 AC_CHECK_FUNCS([select setenv socket])
-AC_CHECK_FUNCS([strcasecmp strdup])
-AC_CHECK_FUNCS([strncasecmp])
 AC_CHECK_FUNCS([tzset uname])
 AC_CHECK_FUNC([tzset],[:],[AC_DEFINE([_NO_TZSET],1,[Define if not using tzset.])])
 
 #--------------------------------------------------------------------------
 # Put ifndef wrapper on fontforge-config.h so we don't call it repeatedly.
 AH_TOP([#ifndef _FF_CONFIG_H
+
 #define _FF_CONFIG_H 1])
 AH_BOTTOM([#endif])
 #--------------------------------------------------------------------------
@@ -523,32 +580,40 @@ test x"${i_do_have_libpng}" = xyes && my_libs="${my_libs} ${LIBPNG_LIBS}"
 test x"${i_do_have_libtiff}" = xyes && my_libs="${my_libs} ${LIBTIFF_LIBS}"
 test x"${i_do_have_libuninameslist}" = xyes && my_libs="${my_libs} ${LIBUNINAMESLIST_LIBS}"
 test x"${i_do_have_libunicodenames}" = xyes && my_libs="${my_libs} ${LIBUNICODENAMES_LIBS}"
-test x"${i_do_have_libxml}" = xyes && my_libs="${my_libs} ${LIBXML_LIBS}"
-test x"${i_do_have_libspiro}" = xyes && my_libs="${my_libs} ${LIBSPIRO_LIBS}"
 test x"${i_do_have_cairo}" = xyes && my_libs="${my_libs} ${CAIRO_LIBS}"
 test x"${i_do_have_cairo}" = xyes && my_libs="${my_libs} ${PANGOCAIRO_LIBS}"
 test x"${i_do_have_gui}" = xyes && my_libs="${my_libs} ${PANGO_LIBS}"
 test x"${i_do_have_x}" = xyes && my_libs="${my_libs} ${X_PRE_LIBS} ${X_LIBS} ${X_EXTRA_LIBS}"
 test x"${i_do_have_libreadline}" = xyes && my_libs="${my_libs} ${LIBREADLINE_LIBS}"
+my_libs="${my_libs} ${PYTHON_LIBS}"
+test x"${i_do_have_libspiro}" = xyes && my_libs="${my_libs} ${LIBSPIRO_LIBS}"
+my_libs="${my_libs} ${LIBSPIRO_LIBS}"
 my_libs="${my_libs} ${FREETYPE_LIBS}"
 my_libs="${my_libs} ${PTHREAD_LIBS}"
 my_libs="${my_libs} ${ZLIB_LIBS}"
 my_libs="${my_libs} ${GLIB_LIBS}"
+my_libs="${my_libs} ${LIBXML_LIBS}"
 AC_SUBST([MY_LIBS],[${my_libs}])
 
 #--------------------------------------------------------------------------
 
-
-pythonbinary=python
-AC_ARG_WITH([pythonbinary],
-   [AS_HELP_STRING([--with-pythonbinary[[=/path/to/python2.7]]],[])],
-   [pythonbinary="${withval}"])
-
 have_ipython=no
-if $( $pythonbinary -c 'import IPython' ); then 
-   have_ipython=yes; 
-   AC_DEFINE([HAVE_IPYTHON],[1],[have ipython])
+
+if test x$use_python_cross_option = xyes ; then
+   echo "skipping ipython detection during a cross compile"
+else
+   pythonbinary=python
+   AC_ARG_WITH([pythonbinary],
+      [AS_HELP_STRING([--with-pythonbinary[[=/path/to/python2.7]]],[])],
+      [pythonbinary="${withval}"])
+
+   have_ipython=no
+   if $( $pythonbinary -c 'import IPython' ); then
+      have_ipython=yes;
+      AC_DEFINE([HAVE_IPYTHON],[1],[have ipython])
+   fi
 fi
+
 AM_CONDITIONAL([HAVE_IPYTHON],[test x"${have_ipython}" = xyes])
 
 #--------------------------------------------------------------------------
@@ -560,6 +625,22 @@ AC_ARG_ENABLE([python-even],
                 [enable a menu entry for Even])],
         [have_python_even=yes])
 AM_CONDITIONAL([HAVE_PYTHON_EVEN],[test x"${have_python_even}" = xyes])
+
+#--------------------------------------------------------------------------
+#--------------------------------------------------------------------------
+#--------------------------------------------------------------------------
+
+AC_ARG_ENABLE([breakpad],
+        [AS_HELP_STRING([--enable-breakpad],
+                [Use Breakpad for crash reporting (currently osx only)])],
+        [have_breakpad=yes])
+AM_CONDITIONAL([HAVE_BREAKPAD],[test x"${have_breakpad}" = xyes])
+if test x$have_breakpad = xyes ; then
+   echo "Taking advantage of Breakpad for debug reporting. You must roll a bundle for this to work..."
+   BREAKPAD_LIBADD=' -L$(top_builddir)/osx/FontForge.app/Contents/Frameworks/Breakpad.framework -lBreakpad '
+   AC_DEFINE(USE_BREAKPAD,[1],[Build support and use Breakpad])
+fi
+AC_SUBST(BREAKPAD_LIBADD)
 
 #--------------------------------------------------------------------------
 #--------------------------------------------------------------------------
@@ -592,6 +673,7 @@ AM_CONDITIONAL([FONTFORGE_CAN_USE_GTK],[test x"${fontforge_can_use_gtk}" = xyes]
 AC_CONFIG_FILES([
 Makefile
 inc/Makefile
+lib/Makefile
 libltdl/Makefile
 Unicode/Makefile
 gutils/Makefile
@@ -612,6 +694,7 @@ pycontrib/Makefile
 pycontrib/simple/Makefile
 pycontrib/collab/Makefile
 pycontrib/graphicore/Makefile
+pycontrib/gdraw/Makefile
 nodejs/Makefile
 nodejs/collabwebview/Makefile
 nodejs/collabwebview/css/Makefile
@@ -633,6 +716,9 @@ osx/FontForge.app/Contents/Resources/opt/Makefile
 osx/FontForge.app/Contents/Resources/opt/local/Makefile
 osx/FontForge.app/Contents/Resources/opt/local/etc/Makefile
 osx/FontForge.app/Contents/Resources/opt/local/etc/fonts/Makefile
+osx/FontForge.app/Contents/Resources/breakpad/Makefile
+osx/FontForge.app/Contents/Resources/breakpad/webinterface/Makefile
+osx/FontForge.app/Contents/Resources/breakpad/webinterface/support/Makefile
 osx/FontForge.app/Contents/MacOS/Makefile
 osx/FontForge.app/Contents/MacOS/CocoaDialog.app/Makefile
 osx/FontForge.app/Contents/MacOS/CocoaDialog.app/Contents/Makefile
@@ -645,12 +731,23 @@ osx/FontForge.app/Contents/MacOS/CocoaDialog.app/Contents/Resources/PopUpButton.
 osx/FontForge.app/Contents/MacOS/CocoaDialog.app/Contents/Resources/Progressbar.nib/Makefile
 osx/FontForge.app/Contents/MacOS/CocoaDialog.app/Contents/Resources/SecureInputbox.nib/Makefile
 osx/FontForge.app/Contents/MacOS/CocoaDialog.app/Contents/Resources/Textbox.nib/Makefile
-fontforge.pc
-])
+osx/FontForge.app/Contents/Frameworks/Makefile
+osx/FontForge.app/Contents/Frameworks/Breakpad.framework/Makefile
+osx/FontForge.app/Contents/Frameworks/Breakpad.framework/Versions/Makefile
+osx/FontForge.app/Contents/Frameworks/Breakpad.framework/Versions/A/Makefile
+osx/FontForge.app/Contents/Frameworks/Breakpad.framework/Versions/A/Headers/Makefile
+osx/FontForge.app/Contents/Frameworks/Breakpad.framework/Versions/A/Resources/Makefile
+osx/FontForge.app/Contents/Frameworks/Breakpad.framework/Versions/A/Resources/crash_report_sender.app/Makefile
+osx/FontForge.app/Contents/Frameworks/Breakpad.framework/Versions/A/Resources/crash_report_sender.app/Contents/Makefile
+osx/FontForge.app/Contents/Frameworks/Breakpad.framework/Versions/A/Resources/crash_report_sender.app/Contents/MacOS/Makefile
+osx/FontForge.app/Contents/Frameworks/Breakpad.framework/Versions/A/Resources/crash_report_sender.app/Contents/Resources/Makefile
+osx/FontForge.app/Contents/Frameworks/Breakpad.framework/Versions/A/Resources/crash_report_sender.app/Contents/Resources/English.lproj/Makefile
+breakpad/Makefile
+breakpad/server/Makefile
 
-# GNUmakefiles that act as wrappers around portable makefiles and
-# provide additional targets.
-AC_CONFIG_FILES([fontforge/GNUmakefile])
+fontforge.pc
+osx/FontForge.app/Contents/Info.plist
+])
 
 #--------------------------------------------------------------------------
 
@@ -661,32 +758,8 @@ FONTFORGE_CREATE_PKGCONFIG_FILES
 AC_CONFIG_FILES([fontforgeexe/darwinsetup],[chmod +x fontforgeexe/darwinsetup])
 
 #--------------------------------------------------------------------------
-# Create FontForge and Python test scripts to be used with 'make check' or
-# individually as 'fontforge --lang=XX --script=testXXXX.XX'
+# Create FontForge and Python test driver
 AC_CONFIG_FILES([tests/atlocal])
-
-rm -f tests/*.pe tests/*.py
-
-if test x$i_do_have_native_scripting = xyes; then
-  ff_script_files="helper107 helper118A helper118B svg2ttf test001	\
-	test002 test003 test004 test005 test006 test007 test008 test009	\
-	test010 test101 test102 test103 test104 test105 test106 test107	\
-	test108 test109 test110 test111 test112 test113 test114 test115	\
-	test116 test117 test118 test119 test120 test121 test122 test123	\
-	test124 test125 test126 test127"
-  for arg in ${ff_script_files}; do
-    AC_CONFIG_FILES([tests/$arg.pe])
-  done
-fi
-
-if test x$i_do_have_python_scripting = xyes; then
-  py_script_files="findoverlapbugs test0001 test0101 test1001a test1001b \
-	test1001c test1001 test1002 test1003 test1004 test1005 test1006	\
-	test1007"
-  for arg in ${py_script_files}; do
-    AC_CONFIG_FILES([tests/$arg.py])
-  done
-fi
 
 #--------------------------------------------------------------------------
 # Collect "GIT" compile-time information to help when debugging FontForge.
@@ -707,8 +780,9 @@ AC_DEFINE_UNQUOTED(FONTFORGE_MODTIME_RAW,$FONTFORGE_MODTIME,"Epoch time that con
 AC_DEFINE_UNQUOTED(FONTFORGE_MODTIME_STR_RAW,$FONTFORGE_MODTIME_STR,
 	"A user friendly date that that configure was run at: For example 01:48 GMT 6-Sep-2012 (no quotes)")
 AC_DEFINE_UNQUOTED(FONTFORGE_VERSIONDATE_RAW,$FONTFORGE_VERSIONDATE,"YYYYMMDD as number when configure was run (no quotes)")
-
-#--------------------------------------------------------------------------
+AC_SUBST(FONTFORGE_GIT_VERSION)
+AC_SUBST(FONTFORGE_VERSIONDATE)
+AC_SUBST(FONTFORGE_MODTIME_STR)
 
 #--------------------------------------------------------------------------
 
@@ -731,25 +805,23 @@ Summary of optional features:
   python scripting	${i_do_have_python_scripting}
   python extension	${i_do_have_python_extension}
   freetype debugger	${i_do_have_freetype_debugger}
-  capslock for alt	${i_do_have_capslock_for_alt}
   raw points mode	${i_do_have_debug_raw_points}
   tile path		${i_do_have_tile_path}
   gb12345 encoding	${i_do_have_gb12345}
 
 Summary of optional dependencies:
 
-  cairo			${i_do_have_cairo}  	${cairo_url}
-  giflib		${i_do_have_giflib}  	${giflib_url}
-  libjpeg		${i_do_have_libjpeg}  	${libjpeg_url}
-  libpng		${i_do_have_libpng}  	${libpng_url}
-  libtiff		${i_do_have_libtiff}  	${libtiff_url}
-  libxml		${i_do_have_libxml}  	${libxml_url}
-  libspiro		${i_do_have_libspiro}  	${libspiro_url}
-  libuninameslist	${i_do_have_libuninameslist}  	${libuninameslist_url}
-  libunicodenames	${i_do_have_libunicodenames}  	${libunicodenames_url}
-  zeromq (libzmq)	${i_do_have_libzmq}  	${libzmq_url}
-  libreadline		${i_do_have_libreadline}  	${libreadline_url}
-  X Window System	${i_do_have_x}
+Optional Library	UseIt?	HaveIt?	WebsiteURL
+  cairo			${with_cairo}	${i_do_have_cairo}	${cairo_url}
+  giflib		${with_giflib}	${i_do_have_giflib}	${giflib_url}
+  libjpeg		${with_libjpeg}	${i_do_have_libjpeg}	${libjpeg_url}
+  libpng		${with_libpng}	${i_do_have_libpng}	${libpng_url}
+  libreadline		${with_libreadline}	${i_do_have_libreadline}	${libreadline_url}
+  libspiro		${with_libspiro}	${i_do_have_libspiro}	${libspiro_url}
+  libtiff		${with_libtiff}	${i_do_have_libtiff}	${libtiff_url}
+  libuninameslist	${with_libuninameslist}	${i_do_have_libuninameslist}	${libuninameslist_url}
+  zeromq (libzmq)		${i_do_have_libzmq}	${libzmq_url}
+  X Window System		${i_do_have_x}
 ])
 
 #--------------------------------------------------------------------------

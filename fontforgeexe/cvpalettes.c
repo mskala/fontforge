@@ -25,6 +25,7 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "fontforgeui.h"
+#include "collabclientui.h"
 
 int palettes_docked=1;
 int rectelipse=0, polystar=0, regular_star=1;
@@ -41,8 +42,11 @@ extern int interpCPsOnMotion;
 #include <utype.h>
 #include <gresource.h>
 #include "charview_private.h"
+#include "gdraw/hotkeys.h"
 
 static void CVLCheckLayerCount(CharView *cv, int resize);
+
+extern void CVDebugFree(DebugView *dv);
 
 extern GBox _ggadget_Default_Box;
 #define ACTIVE_BORDER   (_ggadget_Default_Box.active_border)
@@ -108,6 +112,32 @@ static GFont *toolsfont=NULL, *layersfont=NULL;
 #define BV_LAYERS_WIDTH		73
 #define BV_SHADES_HEIGHT	(8+9*16)
 
+/* These are control ids for the layers palette controls */
+#define CID_VBase	1000
+#define CID_VGrid	(CID_VBase+ly_grid)
+#define CID_VBack	(CID_VBase+ly_back)
+#define CID_VFore	(CID_VBase+ly_fore)
+
+#define CID_EBase	3000
+#define CID_EGrid	(CID_EBase+ly_grid)
+#define CID_EBack	(CID_EBase+ly_back)
+#define CID_EFore	(CID_EBase+ly_fore)
+
+#define CID_QBase	5000
+#define CID_QGrid	(CID_QBase+ly_grid)
+#define CID_QBack	(CID_QBase+ly_back)
+#define CID_QFore	(CID_QBase+ly_fore)
+
+#define CID_FBase	7000
+
+#define CID_SB		8000
+#define CID_Edit	8001
+
+#define CID_AddLayer    9000
+#define CID_RemoveLayer 9001
+#define CID_RenameLayer 9002
+#define CID_LayersMenu  9003
+
 static void ReparentFixup(GWindow child,GWindow parent, int x, int y, int width, int height ) {
     /* This is so nice */
     /* KDE does not honor my request for a border for top level windows */
@@ -122,6 +152,22 @@ static void ReparentFixup(GWindow child,GWindow parent, int x, int y, int width,
     if ( width!=0 )
 	GDrawResize(child,width,height);
     GDrawSetWindowBorder(child,1,GDrawGetDefaultForeground(NULL));
+}
+
+void onCollabSessionStateChanged( GObject* gobj, FontViewBase* fv )
+{
+    bool inCollab = collabclient_inSessionFV( fv );
+
+    if (cvlayers != NULL) {
+      GGadgetSetEnabled(GWidgetGetControl(cvlayers,CID_AddLayer),    !inCollab );
+      GGadgetSetEnabled(GWidgetGetControl(cvlayers,CID_RemoveLayer), !inCollab );
+      GGadgetSetEnabled(GWidgetGetControl(cvlayers,CID_RenameLayer), !inCollab );
+    } else if (cvlayers2 != NULL && 0) {
+      // These controls seem not to exist in cvlayers2. We can look deeper into this later.
+      GGadgetSetEnabled(GWidgetGetControl(cvlayers2,CID_AddLayer),    !inCollab );
+      GGadgetSetEnabled(GWidgetGetControl(cvlayers2,CID_RemoveLayer), !inCollab );
+      GGadgetSetEnabled(GWidgetGetControl(cvlayers2,CID_RenameLayer), !inCollab );
+    }
 }
 
 /* Initialize a window that is to be used for a palette. Specific widgets and other functionality are added elsewhere. */
@@ -162,8 +208,14 @@ static GWindow CreatePalette(GWindow w, GRect *pos, int (*eh)(GWindow,GEvent *),
     gw = GDrawCreateTopWindow(NULL,&newpos,eh,user_data,wattrs);
     if ( palettes_docked )
 	ReparentFixup(gw,v,0,pos->y,pos->width,pos->height);
+
+    collabclient_addSessionJoiningCallback( onCollabSessionStateChanged );
+    collabclient_addSessionLeavingCallback( onCollabSessionStateChanged );
+    
 return( gw );
 }
+
+
 
 /* Return screen coordinates of the palette in off, relative to the root window origin. */
 static void SaveOffsets(GWindow main, GWindow palette, GPoint *off) {
@@ -841,10 +893,18 @@ static void ToolsExpose(GWindow pixmap, CharView *cv, GRect *r) {
 /*	else								 */
 	    GDrawDrawImage(pixmap,buttons[mi][j],NULL,j*27+1,i*27+1);
 	norm = (mi*2+j!=tool);
-	GDrawDrawLine(pixmap,j*27,i*27,j*27+25,i*27,norm?0xe0e0e0:0x707070);
-	GDrawDrawLine(pixmap,j*27,i*27,j*27,i*27+25,norm?0xe0e0e0:0x707070);
-	GDrawDrawLine(pixmap,j*27,i*27+25,j*27+25,i*27+25,norm?0x707070:0xe0e0e0);
-	GDrawDrawLine(pixmap,j*27+25,i*27,j*27+25,i*27+25,norm?0x707070:0xe0e0e0);
+	{
+	  // These are from charview.c.
+	  extern int cvbutton3d; // Default 1.
+	  extern Color cvbutton3dedgelightcol; // Default 0xe0e0e0.
+	  extern Color cvbutton3dedgedarkcol; // Default 0x707070.
+	  if (cvbutton3d) {
+	    GDrawDrawLine(pixmap,j*27,i*27,j*27+25,i*27,norm?cvbutton3dedgelightcol:cvbutton3dedgedarkcol);
+	    GDrawDrawLine(pixmap,j*27,i*27,j*27,i*27+25,norm?cvbutton3dedgelightcol:cvbutton3dedgedarkcol);
+	    GDrawDrawLine(pixmap,j*27,i*27+25,j*27+25,i*27+25,norm?cvbutton3dedgedarkcol:cvbutton3dedgelightcol);
+	    GDrawDrawLine(pixmap,j*27+25,i*27,j*27+25,i*27+25,norm?cvbutton3dedgedarkcol:cvbutton3dedgelightcol);
+	  }
+	}
     }
     GDrawSetFont(pixmap,toolsfont);
     temp.x = 52-16; temp.y = i*27; temp.width = 16; temp.height = 4*12;
@@ -959,7 +1019,7 @@ void CVToolsSetCursor(CharView *cv, int state, char *device) {
 	else
 	    shouldshow = cv->s1_tool;
     }
-    if ( shouldshow==cvt_magnify && (state&ksm_alt))
+    if ( shouldshow==cvt_magnify && (state&ksm_meta))
 	shouldshow = cvt_minify;
     if ( shouldshow!=cv->showing_tool ) {
 	CPEndInfo(cv);
@@ -1043,6 +1103,8 @@ static void CVChangeSpiroMode(CharView *cv) {
 #endif
 }
 
+char* HKTextInfoToUntranslatedTextFromTextInfo( GTextInfo* ti ); // From ../gdraw/gmenu.c.
+
 static void ToolsMouse(CharView *cv, GEvent *event) {
     int i = (event->u.mouse.y/27), j = (event->u.mouse.x/27), mi=i;
     int pos;
@@ -1109,7 +1171,22 @@ return;			/* If the wm gave me a window the wrong size */
 		else if ( pos==cvt_spiroright )
 		    msg = _("Add a next constraint point (sometimes like a tangent)");
 	    }
-	    GGadgetPreparePopup8(cvtools,msg);
+	    // We want to display the hotkey for the key in question if possible.
+	    char * mininame = HKTextInfoToUntranslatedTextFromTextInfo(&cvtoollist[pos].ti);
+	    char * menuname = NULL;
+	    Hotkey* toolhotkey = NULL;
+            if (mininame != NULL) {
+              if (asprintf(&menuname, "%s%s", "Point.Tools.", mininame) != -1) {
+	        toolhotkey = hotkeyFindByMenuPath(cv->gw, menuname);
+	        free(menuname); menuname = NULL;
+              }
+              free(mininame); mininame = NULL;
+            }
+	    char * finalmsg = NULL;
+	    if (toolhotkey != NULL && asprintf(&finalmsg, "%s (%s)", msg, toolhotkey->text) != -1) {
+	      GGadgetPreparePopup8(cvtools, finalmsg);
+	      free(finalmsg); finalmsg = NULL;
+	    } else GGadgetPreparePopup8(cvtools, msg); // That's what we were doing before. Much simpler.
 	} else if ( pos!=cv->pressed_tool || cv->had_control != (((event->u.mouse.state&ksm_control) || styluscntl)?1:0) )
 	    cv->pressed_display = cvt_none;
 	else
@@ -1258,31 +1335,6 @@ return( cvtools );
     /* ******************  Layers Palette  ********************* */
     /* ********************************************************* */
 
-/* These are control ids for the layers palette controls */
-#define CID_VBase	1000
-#define CID_VGrid	(CID_VBase+ly_grid)
-#define CID_VBack	(CID_VBase+ly_back)
-#define CID_VFore	(CID_VBase+ly_fore)
-
-#define CID_EBase	3000
-#define CID_EGrid	(CID_EBase+ly_grid)
-#define CID_EBack	(CID_EBase+ly_back)
-#define CID_EFore	(CID_EBase+ly_fore)
-
-#define CID_QBase	5000
-#define CID_QGrid	(CID_QBase+ly_grid)
-#define CID_QBack	(CID_QBase+ly_back)
-#define CID_QFore	(CID_QBase+ly_fore)
-
-#define CID_FBase	7000
-
-#define CID_SB		8000
-#define CID_Edit	8001
-
-#define CID_AddLayer    9000
-#define CID_RemoveLayer 9001
-#define CID_RenameLayer 9002
-#define CID_LayersMenu  9003
 
 
 /* Create a layer thumbnail */
@@ -1302,6 +1354,21 @@ static void CVLayers2Set(CharView *cv) {
     GGadgetSetChecked(GWidgetGetControl(cvlayers2,CID_VFore),cv->showfore);
     GGadgetSetChecked(GWidgetGetControl(cvlayers2,CID_VBack),cv->showback[0]&1);
     GGadgetSetChecked(GWidgetGetControl(cvlayers2,CID_VGrid),cv->showgrids);
+
+    int ly = 0;
+    // We want to look at the unhandled layers.
+    if (ly <= ly_back) ly = ly_back + 1;
+    if (ly <= ly_fore) ly = ly_fore + 1;
+    if (ly <= ly_grid) ly = ly_grid + 1;
+    while (ly < cv->b.sc->parent->layer_cnt) {
+      GGadget *tmpgadget = GWidgetGetControl(cvlayers2, CID_VBase + ly);
+      if (tmpgadget != NULL) {
+        // We set a low cap on the number of layers provisioned with check boxes for safety.
+        // So it is important to check that this exists.
+        GGadgetSetChecked(tmpgadget, cv->showback[ly>>5]&(1<<(ly&31)));
+      }
+      ly ++;
+    }
 
 	 /* set old to NULL */
     layer2.offtop = 0;
@@ -1383,6 +1450,8 @@ return;
 	} else if ( layer2.offtop+i>=layer2.current_layers ) {
     break;
 	} else if ( layer2.layers[layer2.offtop+i]!=NULL ) {
+#if 0
+	    // This is currently broken, and we do not have time to fix it.
 	    BDFChar *bdfc = layer2.layers[layer2.offtop+i];
 	    base.data = bdfc->bitmap;
 	    base.bytes_per_line = bdfc->bytes_per_line;
@@ -1391,21 +1460,38 @@ return;
 	    GDrawDrawImage(pixmap,&gi,NULL,
 		    r.x+2+bdfc->xmin,
 		    CV_LAYERS2_HEADER_HEIGHT + i*CV_LAYERS2_LINE_HEIGHT+as-bdfc->ymax);
+#else
+	    // This logic comes from CVInfoDrawText.
+	    const int layernamesz = 100;
+	    char layername[layernamesz+1];
+	    strncpy(layername,_("Guide"),layernamesz);
+	    int idx = layer2.offtop+i-1;
+	    if(idx >= 0 && idx < cv->b.sc->parent->layer_cnt) {
+	      strncpy(layername,cv->b.sc->parent->layers[idx].name,layernamesz);
+	    } else {
+	      fprintf(stderr, "Invalid layer!\n");
+	    }
+	    // And this comes from above.
+	    GDrawDrawText8(pixmap,r.x+2,CV_LAYERS2_HEADER_HEIGHT + i*CV_LAYERS2_LINE_HEIGHT + (CV_LAYERS2_LINE_HEIGHT-12)/2+12,
+		    (char *) layername,-1,ll==layer2.active?0xffffff:GDrawGetDefaultForeground(NULL));
+#endif // 0
 	}
     }
 }
 
-#define MID_LayerInfo	1
-#define MID_NewLayer	2
-#define MID_DelLayer	3
-#define MID_First	4
-#define MID_Earlier	5
-#define MID_Later	6
-#define MID_Last	7
-#define MID_MakeLine 100
-#define MID_MakeArc  200
-#define MID_InsertPtOnSplineAt  2309
-#define MID_NameContour  2318
+// Frank changed the prefix from MID to MIDL in order to avert conflicts with values set in charview_private.h.
+#define MIDL_LayerInfo	1
+#define MIDL_NewLayer	2
+#define MIDL_DelLayer	3
+#define MIDL_First	4
+#define MIDL_Earlier	5
+#define MIDL_Later	6
+#define MIDL_Last	7
+#define MIDL_MakeLine 100
+#define MIDL_MakeArc  200
+#define MIDL_InsertPtOnSplineAt  2309
+#define MIDL_NamePoint  2318
+#define MIDL_NameContour  2319
 
 static void CVLayer2Invoked(GWindow v, GMenuItem *mi, GEvent *e) {
     CharView *cv = (CharView *) GDrawGetUserData(v);
@@ -1417,11 +1503,11 @@ static void CVLayer2Invoked(GWindow v, GMenuItem *mi, GEvent *e) {
     buts[0] = _("_Yes"); buts[1]=_("_No"); buts[2] = NULL;
 
     switch ( mi->mid ) {
-      case MID_LayerInfo:
+      case MIDL_LayerInfo:
 	if ( !LayerDialog(cv->b.layerheads[cv->b.drawmode],cv->b.sc->parent))
 return;
       break;
-      case MID_NewLayer:
+      case MIDL_NewLayer:
 	LayerDefault(&temp);
 	if ( !LayerDialog(&temp,cv->b.sc->parent))
 return;
@@ -1431,7 +1517,7 @@ return;
 	cv->b.layerheads[dm_back] = &sc->layers[ly_back];
 	++sc->layer_cnt;
       break;
-      case MID_DelLayer:
+      case MIDL_DelLayer:
 	if ( sc->layer_cnt==2 )		/* May not delete the last foreground layer */
 return;
 	if ( gwwv_ask(_("Cannot Be Undone"),(const char **) buts,0,1,_("This operation cannot be undone, do it anyway?"))==1 )
@@ -1447,7 +1533,7 @@ return;
 	if ( layer==sc->layer_cnt )
 	    cv->b.layerheads[dm_fore] = &sc->layers[layer-1];
       break;
-      case MID_First:
+      case MIDL_First:
 	if ( layer==ly_fore )
 return;
 	temp = sc->layers[layer];
@@ -1456,7 +1542,7 @@ return;
 	sc->layers[i+1] = temp;
 	cv->b.layerheads[dm_fore] = &sc->layers[ly_fore];
       break;
-      case MID_Earlier:
+      case MIDL_Earlier:
 	if ( layer==ly_fore )
 return;
 	temp = sc->layers[layer];
@@ -1464,7 +1550,7 @@ return;
 	sc->layers[layer-1] = temp;
 	cv->b.layerheads[dm_fore] = &sc->layers[layer-1];
       break;
-      case MID_Later:
+      case MIDL_Later:
 	if ( layer==sc->layer_cnt-1 )
 return;
 	temp = sc->layers[layer];
@@ -1472,7 +1558,7 @@ return;
 	sc->layers[layer+1] = temp;
 	cv->b.layerheads[dm_fore] = &sc->layers[layer+1];
       break;
-      case MID_Last:
+      case MIDL_Last:
 	if ( layer==sc->layer_cnt-1 )
 return;
 	temp = sc->layers[layer];
@@ -1491,8 +1577,8 @@ static void Layer2Menu(CharView *cv,GEvent *event, int nolayer) {
     int i;
     static char *names[] = { N_("Layer Info..."), N_("New Layer..."), N_("Del Layer"), (char *) -1,
 	    N_("_First"), N_("_Earlier"), N_("L_ater"), N_("_Last"), NULL };
-    static int mids[] = { MID_LayerInfo, MID_NewLayer, MID_DelLayer, -1,
-	    MID_First, MID_Earlier, MID_Later, MID_Last, 0 };
+    static int mids[] = { MIDL_LayerInfo, MIDL_NewLayer, MIDL_DelLayer, -1,
+	    MIDL_First, MIDL_Earlier, MIDL_Later, MIDL_Last, 0 };
     int layer = CVLayer(&cv->b);
 
     memset(mi,'\0',sizeof(mi));
@@ -1506,13 +1592,13 @@ static void Layer2Menu(CharView *cv,GEvent *event, int nolayer) {
 	mi[i].ti.bg = COLOR_DEFAULT;
 	mi[i].mid = mids[i];
 	mi[i].invoke = CVLayer2Invoked;
-	if ( mids[i]!=MID_NewLayer && nolayer )
+	if ( mids[i]!=MIDL_NewLayer && nolayer )
 	    mi[i].ti.disabled = true;
-	if (( mids[i]==MID_First || mids[i]==MID_Earlier ) && layer==ly_fore )
+	if (( mids[i]==MIDL_First || mids[i]==MIDL_Earlier ) && layer==ly_fore )
 	    mi[i].ti.disabled = true;
-	if (( mids[i]==MID_Last || mids[i]==MID_Later ) && layer==cv->b.sc->layer_cnt-1 )
+	if (( mids[i]==MIDL_Last || mids[i]==MIDL_Later ) && layer==cv->b.sc->layer_cnt-1 )
 	    mi[i].ti.disabled = true;
-	if ( mids[i]==MID_DelLayer && cv->b.sc->layer_cnt==2 )
+	if ( mids[i]==MIDL_DelLayer && cv->b.sc->layer_cnt==2 )
 	    mi[i].ti.disabled = true;
     }
     GMenuCreatePopupMenu(cvlayers2,event, mi);
@@ -1599,6 +1685,8 @@ return(true);
       case et_controlevent:
 	if ( event->u.control.subtype == et_radiochanged ) {
 	    enum drawmode dm = cv->b.drawmode;
+	    int tmpcid = -1;
+	    int tmplayer = -1;
 	    switch(GGadgetGetCid(event->u.control.g)) {
 	      case CID_VFore:
 		CVShows.showfore = cv->showfore = GGadgetIsChecked(event->u.control.g);
@@ -1618,6 +1706,20 @@ return(true);
 	      case CID_VGrid:
 		CVShows.showgrids = cv->showgrids = GGadgetIsChecked(event->u.control.g);
 	      break;
+	      default:
+		tmpcid = GGadgetGetCid(event->u.control.g);
+		tmplayer = tmpcid - CID_VBase;
+		if (tmpcid < 0 || tmplayer < 0) break;
+		// We check that the layer is valid (since the code does not presently, as far as Frank knows, handle layer deletion).
+		// We also check that the CID is within the allocated range (although this may not be necessary since the checkbox would not exist otherwise).
+		if (tmplayer > 0 && tmplayer < 999 && tmplayer < cv->b.sc->parent->layer_cnt) {
+		  if (GGadgetIsChecked(event->u.control.g)) {
+		    cv->showback[tmplayer>>5]|=(1<<(tmplayer&31));
+		  } else {
+		    cv->showback[tmplayer>>5]&=~(1<<(tmplayer&31));
+		  }
+		}
+		break;
 	    }
 	    GDrawRequestExpose(cv->v,NULL,false);
 	    if ( dm!=cv->b.drawmode )
@@ -1723,6 +1825,23 @@ return;
     gcd[5].gd.popup_msg = (unichar_t *) _("Is Layer Visible?");
     gcd[5].gd.box = &radio_box;
     gcd[5].creator = GCheckBoxCreate;
+
+    int wi = 6; // Widget index.
+    int ly = 0;
+    // We want to look at the unhandled layers.
+    if (ly <= ly_back) ly = ly_back + 1;
+    if (ly <= ly_fore) ly = ly_fore + 1;
+    if (ly <= ly_grid) ly = ly_grid + 1;
+    while (ly < cv->b.sc->parent->layer_cnt && wi < 24) {
+      gcd[wi].gd.pos.x = 5; gcd[wi].gd.pos.y = gcd[wi-1].gd.pos.y+CV_LAYERS2_LINE_HEIGHT; 
+      gcd[wi].gd.flags = gg_enabled|gg_visible|gg_dontcopybox|gg_pos_in_pixels|gg_utf8_popup;
+      gcd[wi].gd.cid = CID_VBase + ly; // There are plenty of CID values available for these above CID_VBase.
+      gcd[wi].gd.popup_msg = (unichar_t *) _("Is Layer Visible?");
+      gcd[wi].gd.box = &radio_box;
+      gcd[wi].creator = GCheckBoxCreate;
+      ly++;
+      wi++;
+    }
 
     if ( cv->showgrids ) gcd[3].gd.flags |= gg_cb_on;
     if ( cv->showback[0]&1 ) gcd[4].gd.flags |= gg_cb_on;
@@ -1835,6 +1954,9 @@ static void CVLayers1Set(CharView *cv) {
  * are created or hid here, only the state of existing gadgets is changed.
  * New layer gadgets are created in CVLCheckLayerCount(). */
 void CVLayersSet(CharView *cv) {
+    if( cv )
+	onCollabSessionStateChanged( 0, cv->b.fv );
+    
     if ( cv->b.sc->parent->multilayer ) {
 	CVLayers2Set(cv);
 return;
@@ -3018,6 +3140,7 @@ return( cvlayers );
     GVisibilityBoxSetToMinWH(GWidgetGetControl(cvlayers,CID_VGrid));
     GVisibilityBoxSetToMinWH(GWidgetGetControl(cvlayers,CID_VBack));
     GVisibilityBoxSetToMinWH(GWidgetGetControl(cvlayers,CID_VFore));
+
 return( cvlayers );
 }
 
@@ -3070,23 +3193,24 @@ static void CVPopupSelectInvoked(GWindow v, GMenuItem *mi, GEvent *e) {
       case 3:
 	CVMakeClipPath(cv);
       break;
-    case MID_MakeLine: {
-	CharView *cv = (CharView *) GDrawGetUserData(v);
-	_CVMenuMakeLine((CharViewBase *) cv,mi->mid==MID_MakeArc, e!=NULL && (e->u.mouse.state&ksm_alt));
+    case MIDL_MakeLine: {
+	_CVMenuMakeLine((CharViewBase *) cv,mi->mid==MIDL_MakeArc, e!=NULL && (e->u.mouse.state&ksm_meta));
 	break;
     }
-    case MID_MakeArc: {
-	CharView *cv = (CharView *) GDrawGetUserData(v);
-	_CVMenuMakeLine((CharViewBase *) cv,mi->mid==MID_MakeArc, e!=NULL && (e->u.mouse.state&ksm_alt));
+    case MIDL_MakeArc: {
+	_CVMenuMakeLine((CharViewBase *) cv,mi->mid==MIDL_MakeArc, e!=NULL && (e->u.mouse.state&ksm_meta));
 	break;
     }
-    case MID_InsertPtOnSplineAt: {
-	CharView *cv = (CharView *) GDrawGetUserData(v);
+    case MIDL_InsertPtOnSplineAt: {
 	_CVMenuInsertPt( cv );
 	break;
     }
-    case MID_NameContour: {
-	CharView *cv = (CharView *) GDrawGetUserData(v);
+    case MIDL_NamePoint: {
+	if ( cv->p.sp )
+	    _CVMenuNamePoint( cv, cv->p.sp );
+	break;
+    }
+    case MIDL_NameContour: {
 	_CVMenuNameContour( cv );
 	break;
     }
@@ -3233,6 +3357,16 @@ void CVToolsPopup(CharView *cv, GEvent *event) {
 	i++;
     }
 
+    if ( anysel ) {
+	mi[i].ti.text = (unichar_t *)_("Name Point...");
+	mi[i].ti.text_is_1byte = true;
+	mi[i].ti.fg = COLOR_DEFAULT;
+	mi[i].ti.bg = COLOR_DEFAULT;
+	mi[i].mid = MIDL_NamePoint;
+	mi[i].invoke = CVPopupSelectInvoked;
+	i++;
+    }
+
     if ( cv->b.sc->parent->multilayer ) {
 	mi[i].ti.text = (unichar_t *) _("Make Clip Path");
 	mi[i].ti.text_is_1byte = true;
@@ -3250,7 +3384,7 @@ void CVToolsPopup(CharView *cv, GEvent *event) {
 	mi[i].ti.text_is_1byte = true;
 	mi[i].ti.fg = COLOR_DEFAULT;
 	mi[i].ti.bg = COLOR_DEFAULT;
-	mi[i].mid = MID_MakeLine;
+	mi[i].mid = MIDL_MakeLine;
 	mi[i].invoke = CVPopupSelectInvoked;
 	i++;
 
@@ -3258,7 +3392,7 @@ void CVToolsPopup(CharView *cv, GEvent *event) {
 	mi[i].ti.text_is_1byte = true;
 	mi[i].ti.fg = COLOR_DEFAULT;
 	mi[i].ti.bg = COLOR_DEFAULT;
-	mi[i].mid = MID_MakeArc;
+	mi[i].mid = MIDL_MakeArc;
 	mi[i].invoke = CVPopupSelectInvoked;
 	i++;
 
@@ -3266,7 +3400,15 @@ void CVToolsPopup(CharView *cv, GEvent *event) {
 	mi[i].ti.text_is_1byte = true;
 	mi[i].ti.fg = COLOR_DEFAULT;
 	mi[i].ti.bg = COLOR_DEFAULT;
-	mi[i].mid = MID_InsertPtOnSplineAt;
+	mi[i].mid = MIDL_InsertPtOnSplineAt;
+	mi[i].invoke = CVPopupSelectInvoked;
+	i++;
+
+	mi[i].ti.text = (unichar_t *) _("Name Point");
+	mi[i].ti.text_is_1byte = true;
+	mi[i].ti.fg = COLOR_DEFAULT;
+	mi[i].ti.bg = COLOR_DEFAULT;
+	mi[i].mid = MIDL_NamePoint;
 	mi[i].invoke = CVPopupSelectInvoked;
 	i++;
 
@@ -3274,7 +3416,7 @@ void CVToolsPopup(CharView *cv, GEvent *event) {
 	mi[i].ti.text_is_1byte = true;
 	mi[i].ti.fg = COLOR_DEFAULT;
 	mi[i].ti.bg = COLOR_DEFAULT;
-	mi[i].mid = MID_NameContour;
+	mi[i].mid = MIDL_NameContour;
 	mi[i].invoke = CVPopupSelectInvoked;
 	i++;
     }
@@ -3857,9 +3999,9 @@ void BVToolsSetCursor(BitmapView *bv, int state,char *device) {
 	    shouldshow = bv->s1_tool;
     }
     
-    if ( shouldshow==bvt_magnify && (state&ksm_alt))
+    if ( shouldshow==bvt_magnify && (state&ksm_meta))
 	shouldshow = bvt_minify;
-    if ( (shouldshow==bvt_pencil || shouldshow==bvt_line) && (state&ksm_alt) && bv->bdf->clut!=NULL )
+    if ( (shouldshow==bvt_pencil || shouldshow==bvt_line) && (state&ksm_meta) && bv->bdf->clut!=NULL )
 	shouldshow = bvt_eyedropper;
     if ( shouldshow!=bv->showing_tool ) {
 	GDrawSetCursor(bv->v,tools[shouldshow]);

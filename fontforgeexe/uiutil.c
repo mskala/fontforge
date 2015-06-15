@@ -42,8 +42,6 @@ extern void cygwin_conv_to_full_posix_path(const char *win,char *unx);
 extern void cygwin_conv_to_full_win32_path(const char *unx,char *win);
 #endif
 
-char *helpdir = NULL;
-
 #if __CygWin
 /* Try to find the default browser by looking it up in the windows registry */
 /* The registry is organized as a tree. We are interested in the subtree */
@@ -180,6 +178,7 @@ static void findbrowser(void) {
 
     if ( getenv("BROWSER")!=NULL ) {
 	strncpy(browser,getenv("BROWSER"),sizeof(browser));
+    browser[sizeof(browser)-1] = '\0';
 #if __CygWin			/* Get rid of any dos style names */
 	if ( isalpha(browser[0]) && browser[1]==':' && browser[2]=='\\' )
 	    cygwin_conv_to_full_posix_path(getenv("BROWSER"),browser);
@@ -251,6 +250,7 @@ static void AppendSupportedLocale(char *fullspec) {
 
     /* first, try checking entire string */
     strncpy(buffer,loc,sizeof(buffer));
+    buffer[sizeof(buffer)-1] = '\0';
     if ( SupportedLocale(fullspec,buffer) )
 	return;
 
@@ -331,15 +331,8 @@ return;
 
     if ( strstr(file,"http://")==NULL ) {
 	memset(fullspec,0,sizeof(fullspec));
-	if ( ! GFileIsAbsolute(file) ) {
-	    printf("...helpdir:%p\n", helpdir );
-	    if ( helpdir==NULL || *helpdir=='\0' ) {
-		snprintf(fullspec, PATH_MAX, "%s", getHelpDir());
-	    } else {
-		printf("...helpdir2:%s\n", helpdir );
-		strncpy(fullspec,helpdir,sizeof fullspec - 1);
-	    }
-	}
+	if ( ! GFileIsAbsolute(file) )
+	    snprintf(fullspec, PATH_MAX, "%s", getHelpDir());
 	strcat(fullspec,file);
 	if (( pt = strrchr(fullspec,'#') )!=NULL ) *pt ='\0';
 	if ( !GFileReadable( fullspec )) {
@@ -387,6 +380,7 @@ return;
 	sprintf(temp,"file:%s",fullspec);
 #endif
 	strncpy(fullspec,temp,sizeof(fullspec));
+    fullspec[sizeof(fullspec)-1] = '\0';
 	free(temp);
     }
 #if __Mac
@@ -848,7 +842,7 @@ return;
 }
 
 static void _LogError(const char *format,va_list ap) {
-    char buffer[500], nbuffer[600], *str, *pt, *npt;
+    char buffer[2500], nbuffer[2600], *str, *pt, *npt;
     vsnprintf(buffer,sizeof(buffer),format,ap);
     for ( pt=buffer, npt=nbuffer; *pt!='\0' && npt<nbuffer+sizeof(nbuffer)-2; ) {
 	*npt++ = *pt++;

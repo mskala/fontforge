@@ -437,7 +437,7 @@ GWindow GTabSetGetSubwindow(GGadget *g,int pos);
 int GTabSetGetTabLines(GGadget *g);
 void GTabSetSetNestedExpose(GGadget *g, void (*)(GWindow,GGadget *,GEvent *));
 void GTabSetSetNestedMouse(GGadget *g, int (*)(GGadget *,GEvent *));
-void GTabSetChangeTabName(GGadget *g, char *name, int pos);
+void GTabSetChangeTabName(GGadget *g, const char *name, int pos);
 void GTabSetRemetric(GGadget *g);
 void GTabSetRemoveTabByPos(GGadget *g, int pos);
 void GTabSetRemoveTabByName(GGadget *g, char *name);
@@ -469,7 +469,6 @@ void GFileChooserSetFilterText(GGadget *g,const unichar_t *filter);
 void GFileChooserSetFilterFunc(GGadget *g,GFileChooserFilterType filter);
 void GFileChooserSetInputFilenameFunc(GGadget *g,GFileChooserInputFilenameFuncType filter);
 int GFileChooserDefInputFilenameFunc( GGadget *g, const unichar_t** currentFilename, unichar_t* oldfilename );
-int GFileChooserSaveAsInputFilenameFunc( GGadget *g, const unichar_t** ppt, unichar_t* oldfilename );
 GFileChooserInputFilenameFuncType GFileChooserGetInputFilenameFunc(GGadget *g);
 void GFileChooserSetDir(GGadget *g,unichar_t *dir);
 struct giocontrol *GFileChooserReplaceIO(GGadget *g,struct giocontrol *gc);
@@ -487,7 +486,7 @@ int GFileChooserGetShowHidden(void);
 void GFileChooserSetDirectoryPlacement(int dp);
 int GFileChooserGetDirectoryPlacement(void);
 void GFileChooserSetBookmarks(unichar_t **b);
-void GFileChooserSetPaths(GGadget *g, char **path);
+void GFileChooserSetPaths(GGadget *g, const char* const* path);
 unichar_t **GFileChooserGetBookmarks(void);
 void GFileChooserSetPrefsChangedCallback(void *data, void (*p_c)(void *));
 
@@ -538,7 +537,7 @@ extern void GGadgetPreparePopupImage(GWindow base,const unichar_t *msg,
 	void (*free_image)(const void *data,GImage *img));
 extern void GGadgetPreparePopup(GWindow base,const unichar_t *msg);
 extern void GGadgetPreparePopupR(GWindow base,int msg);
-extern void GGadgetPreparePopup8(GWindow base,char *msg);
+extern void GGadgetPreparePopup8(GWindow base, const char *msg);
 extern void GGadgetEndPopup(void);
 extern void GGadgetPopupExternalEvent(GEvent *e);
 
@@ -601,10 +600,12 @@ typedef struct gresimage {
 } GResImage;
 GResImage *GGadgetResourceFindImage(char *name, GImage *def);
 
+void InitImageCache();
+void ClearImageCache();
 void GGadgetSetImageDir(char *dir);
 void GGadgetSetImagePath(char *path);
-GImage *GGadgetImageCache(char *filename);
-int TryGGadgetImageCache(GImage *image, char *name);
+GImage *GGadgetImageCache(const char *filename);
+int TryGGadgetImageCache(GImage *image, const char *name);
 
 extern unichar_t *utf82u_mncopy(const char *utf8buf,unichar_t *mn);
 

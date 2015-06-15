@@ -26,11 +26,19 @@
 
 include $(top_srcdir)/mk/layout.am
 
-SUBDIRS = Inputbox.nib  MainMenu.nib  Msgbox.nib  PopUpButton.nib  Progressbar.nib  SecureInputbox.nib  Textbox.nib
-FFAPP_FILES = $(wildcard *.cns)
-ffappdir = $(pkgdatadir)/osx/FontForge.app/Contents/MacOS/CocoaDialog.app/Contents/Resources
+SUBDIRS = Inputbox.nib  MainMenu.nib  Msgbox.nib  PopUpButton.nib	\
+	Progressbar.nib  SecureInputbox.nib  Textbox.nib
 
-ffapp_DATA = $(FFAPP_FILES)
+FFAPP_FILES = atom.icns cocoadialog.icns computer.icns document.icns	\
+	find.icns finder.icns firewire.icns folder.icns gear.icns	\
+	globe.icns hazard.icns heart.icns hourglass.icns info.icns	\
+	ipod.icns person.icns sound.icns x.icns
+
 EXTRA_DIST = $(FFAPP_FILES) Changelog $(srcdir)/*.icns $(srcdir)/*.plist $(srcdir)/*.strings
+
+if PLATFORM_OSX
+   ffappdir = $(pkgdatadir)/osx/FontForge.app/Contents/MacOS/CocoaDialog.app/Contents/Resources
+   ffapp_DATA = $(FFAPP_FILES)
+endif
 
 -include $(top_srcdir)/git.mk

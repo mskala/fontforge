@@ -610,7 +610,7 @@ static int msgpopup_eh(GWindow popup,GEvent *event) {
 
 	popup_visible = true;
 	pt = msg = (unichar_t *) popup_info.msg;
-	if ( pt==NULL && popup_info.img==NULL ) {
+	if ( (pt==NULL || *pt=='\0') && popup_info.img==NULL ) {
 	    GGadgetEndPopup();
 return( true );
 	}
@@ -623,14 +623,18 @@ return( true );
 	    GDrawWindowFontMetrics(popup,popup_font,&as, &ds, &ld);
 	    fh = as+ds;
 	    y += as;
-	    do {
-		temp = -1;
+	    while ( *pt!='\0' ) {
+                /* Find end of this line, if multiline text */
 		if (( ept = u_strchr(pt,'\n'))!=NULL )
-		    temp = ept-pt;
+		    temp = ept-pt;  /* display next segment of multiline text */
+                else
+                    temp = -1;     /* last line, so display remainder of text */
 		GDrawDrawText(popup,x,y,pt,temp,popup_foreground);
 		y += fh;
 		pt = ept+1;
-	    } while ( ept!=NULL && *pt!='\0' );
+                if ( ept==NULL )
+                    break;
+	    }
 	}
     } else if ( event->type == et_timer && event->u.timer.timer==popup_timer ) {
 	GGadgetPopupTest(event);
@@ -694,7 +698,7 @@ void GGadgetPreparePopupR(GWindow base,int msg) {
     GGadgetPreparePopupImage(base,GStringGetResource(msg,NULL),NULL,NULL,NULL);
 }
 
-void GGadgetPreparePopup8(GWindow base,char *msg) {
+void GGadgetPreparePopup8(GWindow base, const char *msg) {
     static unichar_t popup_msg[500];
     utf82u_strncpy(popup_msg,msg,sizeof(popup_msg)/sizeof(popup_msg[0]));
     popup_msg[sizeof(popup_msg)/sizeof(popup_msg[0])-1]=0;
@@ -1162,7 +1166,8 @@ return( g->state!=gs_invisible );
 }
 
 void GGadgetSetEnabled(GGadget *g,int enabled) {
-    (g->funcs->setenabled)(g,enabled);
+    if(g)
+	(g->funcs->setenabled)(g,enabled);
 }
 
 int GGadgetIsEnabled(GGadget *g) {

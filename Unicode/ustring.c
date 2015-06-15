@@ -24,6 +24,8 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include <fontforge-config.h>
+
 #include <stddef.h>
 #include "ustring.h"
 #include "utype.h"
@@ -132,6 +134,16 @@ void u_strcpy(unichar_t *to, const unichar_t *from) {
 	*(to++) = ch;
     *to = 0;
 }
+
+char *cc_strncpy(char *to, const char *from, int len) {
+    if( !from ) {
+	to[0] = '\0';
+	return to;
+    }
+    strncpy( to, from, len );
+    return to;
+}
+
 
 void u_strncpy(register unichar_t *to, const unichar_t *from, int len) {
     register unichar_t ch;
@@ -405,9 +417,8 @@ double u_strtod(const unichar_t *str, unichar_t **ptr) {
     char buf[60], *pt, *ret;
     const unichar_t *upt;
     double val;
-    extern double strtod();		/* Please don't delete this, not all of us have good ansi headers */
 
-    for ( upt=str, pt=buf; *upt<128 && *upt!='\0' && pt-buf<sizeof(buf)-1; )
+    for ( upt=str, pt=buf; *upt<128 && *upt!='\0' && pt-buf<(ptrdiff_t)(sizeof(buf)-1); )
 	*pt++ = *upt++;
     *pt = '\0';
     val = strtod(buf,&ret);
@@ -424,7 +435,6 @@ long u_strtol(const unichar_t *str, unichar_t **ptr, int base) {
     char buf[60], *pt, *ret;
     const unichar_t *upt;
     long val;
-    extern long strtol();		/* Please don't delete this, not all of us have good ansi headers */
 
     for ( upt=str, pt=buf; *upt<128 && *upt!='\0' && pt<buf+sizeof(buf)-1; )
 	*pt++ = *upt++;
@@ -870,7 +880,7 @@ char *StripToASCII(const char *utf8_str) {
 	else if ( ch=='\r' && *utf8_str!='\n' )
 	    *pt++ = '\n';
 	else if ( ch==0xa9 /* Copyright sign */ ) {
-	    char *str = "(c)";
+	    const char *str = "(c)";
 	    if ( pt+strlen(str)>=end ) {
 		int off = pt-newcr;
 		newcr = (char *) realloc(newcr,(off+10+strlen(str))+1);
@@ -995,6 +1005,21 @@ int u_endswith(const unichar_t *haystack,const unichar_t *needle) {
     return p == ( haystack + haylen - nedlen );
 }
 
+int u_startswith(const unichar_t *haystack,const unichar_t *needle) {
+
+    if( !haystack || !needle ) 
+	return 0;
+
+    unichar_t* p = u_strstr( haystack, needle );
+    return p == ( haystack );
+}
+
+int uc_startswith(const unichar_t *haystack,const char* needle)
+{
+    return u_startswith( haystack, c_to_u(needle));
+}
+
+
 char* c_itostr( int v )
 {
     static char ret[100+1];
@@ -1051,3 +1076,16 @@ char* str_replace_all( char* s, char* orig, char* replacement, int free_s )
     return ret;
 }
 
+int toint( char* v )
+{
+    if( !v )
+        return 0;
+    return atoi(v);
+}
+char* tostr( int v )
+{
+    const int bufsz = 100;
+    static char buf[101];
+    snprintf(buf,bufsz,"%d",v);
+    return buf;
+}

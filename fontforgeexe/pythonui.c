@@ -26,6 +26,9 @@
  */
 /*			   Python Interface to FontForge		      */
 
+// to get asprintf() defined from stdio.h on GNU platforms
+#define _GNU_SOURCE 1
+
 #define GTimer GTimer_GTK
 #define GList  GList_Glib
 #include <glib.h>
@@ -49,7 +52,10 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include <errno.h>
 #include <stdarg.h>
+#include <stdio.h>
+#include <fcntl.h>
 #include "ffpython.h"
 
 #include "gnetwork.h"
@@ -78,10 +84,10 @@ static void py_tllistcheck(struct gmenuitem *mi,PyObject *owner,
 	struct python_menu_info *menu_data, int menu_cnt) {
     PyObject *arglist, *result;
 
-    if ( menu_data==NULL )
+    if ( menu_data==NULL || mi == NULL )
 return;
 
-    for ( mi = mi->sub; mi->ti.text!=NULL || mi->ti.line ; ++mi ) {
+    for ( mi = mi->sub; mi !=NULL && (mi->ti.text!=NULL || mi->ti.line); ++mi ) {
 	if ( mi->mid==-1 )		/* Submenu */
     continue;
 	if ( mi->mid<0 || mi->mid>=menu_cnt ) {
@@ -575,12 +581,14 @@ static PyObject *PyFFFont_CollabSessionSetUpdatedCallback(PyFF_Font *self, PyObj
 #undef GList
 #undef GMenuItem
 
+
 static void GtkWindowToMainEventLoop_fd_callback( int fd, void* datas )
 {
-    printf("GtkWindowToMainEventLoop_fd_callback()\n");
+//    printf("GtkWindowToMainEventLoop_fd_callback()\n");
     gboolean may_block = false;
     g_main_context_iteration( g_main_context_default(), may_block );
 }
+
 
 
 static PyObject *PyFFFont_addGtkWindowToMainEventLoop(PyFF_Font *self, PyObject *args)
@@ -592,19 +600,43 @@ static PyObject *PyFFFont_addGtkWindowToMainEventLoop(PyFF_Font *self, PyObject 
     if ( !PyArg_ParseTuple( args, "i", &v ))
         return( NULL );
 
-    printf("***************** xid: %d\n", v );
     gpointer gdkwindow = gdk_xid_table_lookup( v );
-    printf("***************** obj: %p\n", gdkwindow );
 
     if( gdkwindow )
     {
         Display* d = GDK_WINDOW_XDISPLAY(gdkwindow);
         int fd = XConnectionNumber(d);
-        printf("***************** fd: %d\n", fd );
         if( fd )
         {
             gpointer udata = 0;
             GDrawAddReadFD( 0, fd, udata, GtkWindowToMainEventLoop_fd_callback );
+        }
+    }
+    
+    /* Boilerplate to return "None" */
+    Py_INCREF(Py_None);
+    result = Py_None;
+    return result;
+}
+
+static PyObject *PyFFFont_getGtkWindowMainEventLoopFD(PyFF_Font *self, PyObject *args)
+{
+    PyObject *result = NULL;
+    PyObject *temp;
+    int v = 0;
+
+    if ( !PyArg_ParseTuple( args, "i", &v ))
+        return( NULL );
+
+    gpointer gdkwindow = gdk_xid_table_lookup( v );
+
+    if( gdkwindow )
+    {
+        Display* d = GDK_WINDOW_XDISPLAY(gdkwindow);
+        int fd = XConnectionNumber(d);
+        if( fd )
+        {
+	    return( Py_BuildValue("i", fd ));
         }
     }
     
@@ -623,21 +655,37 @@ static PyObject *PyFFFont_removeGtkWindowToMainEventLoop(PyFF_Font *self, PyObje
     if ( !PyArg_ParseTuple( args, "i", &v ))
         return( NULL );
 
-    printf("rem ***************** xid: %d\n", v );
     gpointer gdkwindow = gdk_xid_table_lookup( v );
-    printf("rem ***************** obj: %p\n", gdkwindow );
 
     if( gdkwindow )
     {
         Display* d = GDK_WINDOW_XDISPLAY(gdkwindow);
         int fd = XConnectionNumber(d);
-        printf("REMOVE ***************** fd: %d\n", fd );
         if( fd )
         {
             gpointer udata = 0;
             GDrawRemoveReadFD( 0, fd, udata );
         }
     }
+    
+    /* Boilerplate to return "None" */
+    Py_INCREF(Py_None);
+    result = Py_None;
+    return result;
+}
+
+static PyObject *PyFFFont_removeGtkWindowToMainEventLoopByFD(PyFF_Font *self, PyObject *args)
+{
+    PyObject *result = NULL;
+    PyObject *temp;
+    int v = 0;
+
+    if ( !PyArg_ParseTuple( args, "i", &v ))
+        return( NULL );
+
+    int fd = v;
+    gpointer udata = 0;
+    GDrawRemoveReadFD( 0, fd, udata );
     
     /* Boilerplate to return "None" */
     Py_INCREF(Py_None);
@@ -658,7 +706,11 @@ static PyObject *PyFFFont_removeGtkWindowToMainEventLoop(PyFF_Font *self, PyObje
     									\
 static PyObject *PyFFFont_addGtkWindowToMainEventLoop(PyFF_Font *self, PyObject *args)
 { EMPTY_METHOD; }
+static PyObject *PyFFFont_getGtkWindowMainEventLoopFD(PyFF_Font *self, PyObject *args)
+{ EMPTY_METHOD; }
 static PyObject *PyFFFont_removeGtkWindowToMainEventLoop(PyFF_Font *self, PyObject *args)
+{ EMPTY_METHOD; }
+static PyObject *PyFFFont_removeGtkWindowToMainEventLoopByFD(PyFF_Font *self, PyObject *args)
 { EMPTY_METHOD; }
 
 #endif
@@ -710,14 +762,23 @@ PyMethodDef PyFF_FontUI_methods[] = {
    { "CollabLastChangedCodePoint", (PyCFunction) PyFF_getLastChangedCodePoint, METH_VARARGS, "" },
    { "CollabLastSeq", (PyCFunction) PyFF_getLastSeq, METH_VARARGS, "" },
 
+   
+   PYMETHODDEF_EMPTY /* Sentinel */
+};
+
+PyMethodDef module_fontforge_ui_methods[] = {
+
    // allow python code to expose it's gtk mainloop to fontforge
    { "addGtkWindowToMainEventLoop", (PyCFunction) PyFFFont_addGtkWindowToMainEventLoop, METH_VARARGS, "fixme." },
+   { "getGtkWindowMainEventLoopFD", (PyCFunction) PyFFFont_getGtkWindowMainEventLoopFD, METH_VARARGS, "fixme." },
    { "removeGtkWindowToMainEventLoop", (PyCFunction) PyFFFont_removeGtkWindowToMainEventLoop, METH_VARARGS, "fixme." },
+   { "removeGtkWindowToMainEventLoopByFD", (PyCFunction) PyFFFont_removeGtkWindowToMainEventLoopByFD, METH_VARARGS, "fixme." },
 
    
    PYMETHODDEF_EMPTY /* Sentinel */
 };
 
+    
 static PyMethodDef*
 copyUIMethodsToBaseTable( PyMethodDef* ui, PyMethodDef* md )
 {
@@ -734,13 +795,82 @@ copyUIMethodsToBaseTable( PyMethodDef* ui, PyMethodDef* md )
     return md;
 }
 
+static void python_ui_fd_callback( int fd, void* udata );
+static void python_ui_setup_callback( bool makefifo )
+{
+#ifndef __MINGW32__
+    int fd = 0;
+    int err = 0;
+    char *userCacheDir, *sockPath;
+
+    userCacheDir = getFontForgeUserDir(Cache);
+    if ( userCacheDir==NULL ) {
+        LogError("PythonUISetup: failed to discover user cache dir path");
+        return;
+    }
+
+    asprintf(&sockPath, "%s/python-socket", userCacheDir);
+    free(userCacheDir);
+
+    if( makefifo ) {
+        err = mkfifo( sockPath, 0600 );
+        if ( err==-1  &&  errno!=EEXIST) {
+            LogError("PythonUISetup: unable to mkfifo('%s'): errno %d\n", sockPath, errno);
+            free(sockPath);
+            return;
+        }
+    }
+
+    fd = open( sockPath, O_RDONLY | O_NDELAY );
+    if ( fd==-1) {
+        LogError("PythonUISetup: unable to open socket '%s': errno %d\n", sockPath, errno);
+        free(sockPath);
+        return;
+    }
+    free(sockPath);
+
+    void* udata = 0;
+    GDrawAddReadFD( 0, fd, udata, python_ui_fd_callback );
+    return;
+#endif   
+}
+
+static void python_ui_fd_callback( int fd, void* udata )
+{
+#ifndef __MINGW32__
+    char data[ 1024*100 + 1 ];
+    memset(data, '\0', 1024*100 );
+//    sleep( 1 );
+    int sz = read( fd, data, 1024*100 );
+//    fprintf( stderr, "python_ui_fd_callback() sz:%d d:%s\n", sz, data );
+
+    CharView* cv = CharViewFindActive();
+    if( cv )
+    {
+	int layer = 0;
+	PyFF_ScriptString( cv->b.fv, cv->b.sc, layer, data );
+    }
+    
+    GDrawRemoveReadFD( 0, fd, udata );
+    python_ui_setup_callback( 0 );
+#endif    
+}
+
+void PythonUI_namedpipe_Init(void) {
+    python_ui_setup_callback( 1 );
+    
+}
+
 void PythonUI_Init(void) {
     TRACE("PythonUI_Init()\n"); 
     FfPy_Replace_MenuItemStub(PyFF_registerMenuItem);
     set_pyFF_maybeCallCVPreserveState_Func( pyFF_maybeCallCVPreserveState );
     set_pyFF_sendRedoIfInSession_Func( pyFF_sendRedoIfInSession_Func_Real );
 
-    copyUIMethodsToBaseTable( PyFF_FontUI_methods, PyFF_Font_methods );
+    copyUIMethodsToBaseTable( PyFF_FontUI_methods,         PyFF_Font_methods );
+    copyUIMethodsToBaseTable( module_fontforge_ui_methods, module_fontforge_methods );
+
+    
 }
 #endif
 

@@ -467,7 +467,7 @@ static void pdf_BrushCheck(PI *pi,struct glyph_res *gr,struct brush *brush,
 	fprintf( pi->out, ">>\n" );
 	fprintf( pi->out, "stream\n" );
 	if ( grad->stop_cnt==2 ) {
-	    int col = grad->grad_stops[0].col;
+	    unsigned col = grad->grad_stops[0].col;
 	    if ( col==COLOR_INHERITED ) col = 0x000000;
 	    putc((col>>16)&0xff,pi->out);
 	    putc((col>>8 )&0xff,pi->out);
@@ -2642,7 +2642,7 @@ return;
     sample[0].lang = _simplelatnlangs[simple_pos];
 
     for ( j=0; _simplecyrillchoices[j]!=NULL; ++j );
-    simple_pos = rand()%j;
+    simple_pos = rand()%(j+1);
     _simplecyrill[0] = _simplecyrillchoices[simple_pos];
     sample[1].lang = _simplecyrilliclangs[simple_pos];
 }

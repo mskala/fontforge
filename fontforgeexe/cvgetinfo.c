@@ -1037,6 +1037,23 @@ static GTextInfo **AnchorClassesLList(SplineFont *sf) {
 return( ti );
 }
 
+static int AI_NewClass(GGadget *g, GEvent *e) {
+    GIData *ci = GDrawGetUserData(GGadgetGetWindow(g));
+    SplineFont *sf = ci->sc->parent;
+    AnchorClass *ac;
+    GTextInfo **ti;
+    int j;
+    char *name = gwwv_ask_string(_("Anchor Class Name"),"",_("Please enter the name of a Anchor point class to create"));
+    if ( name==NULL )
+return( true );
+    ac = SFFindOrAddAnchorClass(sf,name,NULL);
+    GGadgetSetList(GWidgetGetControl(ci->gw,CID_NameList),
+    ti = AnchorClassesLList(sf),false);
+    for ( j=0; ti[j]->text!=NULL && ti[j]->userdata!=ac; ++j )
+        GGadgetSelectOneListItem(GWidgetGetControl(ci->gw,CID_NameList),j);
+return( true );
+}
+
 static int AI_New(GGadget *g, GEvent *e) {
     if ( e->type==et_controlevent && e->u.control.subtype == et_buttonactivate ) {
 	GIData *ci = GDrawGetUserData(GGadgetGetWindow(g));
@@ -1047,36 +1064,13 @@ static int AI_New(GGadget *g, GEvent *e) {
 	if ( sf->cidmaster ) sf = sf->cidmaster;
 
 	if ( AnchorClassUnused(ci->sc,&waslig)==NULL ) {
-	    ff_post_notice(_("Make a new anchor class"),_("I cannot find an unused anchor class\nto assign a new point to. If you\nwish a new anchor point you must\ndefine a new anchor class with\nElement->Font Info"));
-	    FontInfo(sf,CVLayer((CharViewBase *) (ci->cv)),13,true);		/* Lookups */
-	    if ( AnchorClassUnused(ci->sc,&waslig)==NULL )
-return(true);
-	    GGadgetSetList(GWidgetGetControl(ci->gw,CID_NameList),
-		    AnchorClassesLList(ci->sc->parent),false);
+            if ( !AI_NewClass(g, e) )
+return( false );
 	}
 	ap = AnchorPointNew(ci->cv);
 	if ( ap==NULL )
 return( true );
 	AI_Display(ci,ap);
-    }
-return( true );
-}
-
-static int AI_NewClass(GGadget *g, GEvent *e) {
-    if ( e->type==et_controlevent && e->u.control.subtype == et_buttonactivate ) {
-	GIData *ci = GDrawGetUserData(GGadgetGetWindow(g));
-        SplineFont *sf = ci->sc->parent;
-        AnchorClass *ac;
-        GTextInfo **ti;
-        int j;
-        char *name = gwwv_ask_string(_("Anchor Class Name"),"",_("Please enter the name of a Anchor point class to create"));
-        if ( name==NULL )
-return( true );
-        ac = SFFindOrAddAnchorClass(sf,name,NULL);
-	GGadgetSetList(GWidgetGetControl(ci->gw,CID_NameList),
-		    ti = AnchorClassesLList(sf),false);
-	for ( j=0; ti[j]->text!=NULL && ti[j]->userdata!=ac; ++j )
-	GGadgetSelectOneListItem(GWidgetGetControl(ci->gw,CID_NameList),j);
     }
 return( true );
 }
@@ -1857,7 +1851,7 @@ static void PI_FixStuff(GIData *ci) {
 	else
 	    sp->pointtype = pt_curve;
     } else if ( sp->pointtype == pt_tangent )
-	SplinePointCatagorize(sp);	/* Users can change cps so it isn't a tangent, so check */
+	SplinePointCategorize(sp);	/* Users can change cps so it isn't a tangent, so check */
 }
 
 void PI_Destroy(struct dlistnode *node) {
@@ -3470,7 +3464,7 @@ return( true );
 }
 
 static void SpiroPointGetInfo(CharView *cv, spiro_cp *scp, SplinePointList *spl) {
-    static GIData gi;
+    GIData *gip = calloc(1, sizeof(GIData));
     GRect pos;
     GWindowAttrs wattrs;
     GGadgetCreateData gcd[20];
@@ -3483,12 +3477,12 @@ static void SpiroPointGetInfo(CharView *cv, spiro_cp *scp, SplinePointList *spl)
     GPoint pt;
     int j,k;
 
-    gi.cv = cv;
-    gi.sc = cv->b.sc;
-    gi.curcp = scp;
-    gi.curspl = spl;
-    gi.oldstate = SplinePointListCopy(cv->b.layerheads[cv->b.drawmode]->splines);
-    gi.done = false;
+    gip->cv = cv;
+    gip->sc = cv->b.sc;
+    gip->curcp = scp;
+    gip->curspl = spl;
+    gip->oldstate = SplinePointListCopy(cv->b.layerheads[cv->b.drawmode]->splines);
+    gip->done = false;
     CVPreserveState(&cv->b);
 
     root = GDrawGetRoot(NULL);
@@ -3515,14 +3509,14 @@ static void SpiroPointGetInfo(CharView *cv, spiro_cp *scp, SplinePointList *spl)
 	if ( pos.y+pos.height+20 > screensize.height )
 	    pos.y = screensize.height - pos.height - 20;
 	if ( pos.y<0 ) pos.y = 0;
-	gi.gw = GDrawCreateTopWindow(NULL,&pos,pi_e_h,&gi,&wattrs);
+	gip->gw = GDrawCreateTopWindow(NULL,&pos,pi_e_h,gip,&wattrs);
 
 	memset(&gcd,0,sizeof(gcd));
 	memset(&label,0,sizeof(label));
 	memset(&pb,0,sizeof(pb));
 
 	j=k=0;
-	gi.gcd = gcd;
+	gip->gcd = gcd;
 
 	label[j].text = (unichar_t *) _("_X:");
 	label[j].text_is_1byte = true;
@@ -3731,7 +3725,7 @@ static void SpiroPointGetInfo(CharView *cv, spiro_cp *scp, SplinePointList *spl)
 	pb[0].gd.u.boxelements = varray;
 	pb[0].creator = GHVGroupCreate;
 
-	GGadgetsCreate(gi.gw,pb);
+	GGadgetsCreate(gip->gw,pb);
 
 	GHVBoxSetExpandableRow(pb[0].ret,gb_expandglue);
 	GHVBoxSetExpandableCol(pb[2].ret,gb_expandglue);
@@ -3740,15 +3734,14 @@ static void SpiroPointGetInfo(CharView *cv, spiro_cp *scp, SplinePointList *spl)
 	GHVBoxSetExpandableCol(pb[5].ret,gb_expandglue);
 	GHVBoxSetExpandableCol(pb[6].ret,gb_expandgluesame);
 
-	SpiroChangePoint(&gi);
+	SpiroChangePoint(gip);
 
 	GHVBoxFitWindow(pb[0].ret);
 
     GWidgetHidePalettes();
-    GDrawSetVisible(gi.gw,true);
-    while ( !gi.done )
+    GDrawSetVisible(gip->gw,true);
+    while ( !gip->done )
 	GDrawProcessOneEvent(NULL);
-    GDrawDestroyWindow(gi.gw);
 }
 
 void CVGetInfo(CharView *cv) {

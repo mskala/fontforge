@@ -354,7 +354,7 @@ return( V_B );
 
 static void pfed_write_data(FILE *ttf, float val, int mod) {
     if ( mod==V_F )
-	putlong(ttf,(int) rint(val*256.0));
+	putlong(ttf,(int) rint(val*256.0f));
     else if ( mod==V_S )
 	putshort(ttf,(int) rint(val));
     else
@@ -1137,11 +1137,13 @@ static void pfed_read_normal_contour(FILE *ttf,SplineSet *ss,
     if ( COM_VERB(verb)!=V_MoveTo ) {
 	LogError(_("Whoops, contours must begin with a move to\n") );
 	ss->first = ss->last = SplinePointCreate(0,0);
+	ss->start_offset = 0;
 return;
     }
     offx = pfed_get_coord(ttf,COM_MOD(verb));
     offy = pfed_get_coord(ttf,COM_MOD(verb));
     ss->first = current = SplinePointCreate(offx,offy);
+    ss->start_offset = 0;
     for (;;) {
 	verb = getc(ttf);
 	v = COM_VERB(verb); m = COM_MOD(verb);
@@ -1242,7 +1244,7 @@ return;
     } else {
 	ss->last = current;
     }
-    SPLCatagorizePoints(ss);
+    SPLCategorizePoints(ss);
 }
 
 static void pfed_read_spiro_contour(FILE *ttf,SplineSet *ss,
@@ -1397,7 +1399,7 @@ return;			/* Bad version number */
 	    ss->next = info->guidelines.splines;
 	    info->guidelines.splines = ss;
 	}
-	SPLCatagorizePoints(info->guidelines.splines);
+	SPLCategorizePoints(info->guidelines.splines);
 	free(vs); free(hs);
     }
 }
@@ -2221,7 +2223,7 @@ int ttf_fftm_dump(SplineFont *sf,struct alltabs *at) {
 
     putlong(at->fftmf,0x00000001);	/* Version */
 
-    cvt_unix_to_1904(library_version_configuration.library_source_modtime,results);
+    cvt_unix_to_1904(LibFF_ModTime,results);
     putlong(at->fftmf,results[1]);
     putlong(at->fftmf,results[0]);
 

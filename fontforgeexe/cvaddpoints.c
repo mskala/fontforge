@@ -444,8 +444,8 @@ void CVMouseDownPoint(CharView *cv, GEvent *event) {
 			    cv->active_tool==cvt_tangent?pt_tangent:
 			    /*cv->active_tool==cvt_pen?*/pt_corner);
     int order2 = cv->b.layerheads[cv->b.drawmode]->order2;
-    int order2_style = (order2 && !(event->u.mouse.state&ksm_alt)) ||
-		    (!order2 && (event->u.mouse.state&ksm_alt));
+    int order2_style = (order2 && !(event->u.mouse.state&ksm_meta)) ||
+		    (!order2 && (event->u.mouse.state&ksm_meta));
 
     cv->active_spl = NULL;
     cv->active_sp = NULL;
@@ -577,7 +577,7 @@ return;			/* We clicked on the active point, that's a no-op */
 	cv->p.constrain = sp->me;
 }
 
-static void AdjustControls(SplinePoint *sp) {
+void AdjustControls(SplinePoint *sp) {
     if ( sp->next!=NULL ) {
 	SplineCharDefaultNextCP(sp);	/* also fixes up tangents */
 	SplineCharDefaultPrevCP(sp->next->to);
@@ -732,8 +732,8 @@ return;
 void CVMouseMovePen(CharView *cv, PressedOn *p, GEvent *event) {
     SplinePoint *active = cv->active_sp;
     int order2 = cv->b.layerheads[cv->b.drawmode]->order2;
-    int order2_style = (order2 && !(event->u.mouse.state&ksm_alt)) ||
-		    (!order2 && (event->u.mouse.state&ksm_alt));
+    int order2_style = (order2 && !(event->u.mouse.state&ksm_meta)) ||
+		    (!order2 && (event->u.mouse.state&ksm_meta));
 
     if ( cv->b.sc->inspiro && hasspiro()) {
 	CVMouseMoveSpiroPoint(cv,p);

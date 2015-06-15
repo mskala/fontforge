@@ -25,7 +25,6 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include "ustring.h"
 
@@ -36,22 +35,23 @@ void NoMoreMemMessage(void) {
 }
 
 char *copy(const char *str) {
-    char *ret;
-
-    if ( str==NULL )
-return( NULL );
-    ret = (char *) malloc(strlen(str)+1);
-    strcpy(ret,str);
-return( ret );
+    return str ? strdup(str) : NULL;
 }
 
 char *copyn(const char *str,long n) {
+    /**
+     * MIQ: Note that there is at least one site that relies on
+     *      copyn copying up to n bytes including embedded nulls.
+     *      So using strndup() doesn't provide the same outcomes
+     *      to that code.
+     *      https://github.com/fontforge/fontforge/issues/1239
+     */
     char *ret;
-
     if ( str==NULL )
-return( NULL );
+    	return( NULL );
+
     ret = (char *) malloc(n+1);
     memcpy(ret,str,n);
     ret[n]='\0';
-return( ret );
+    return( ret );
 }

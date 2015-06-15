@@ -325,6 +325,7 @@ struct ttfinfo {
     int16 jstf_isShrink, jstf_prio, jstf_lcnt;
     struct otffeatname *feat_names;
     enum gsub_inusetype justinuse;
+    long ttfFileSize;
 };
 
 struct taboff {
@@ -728,7 +729,7 @@ struct alltabs {
     SplineFont *sf;
     EncMap *map;
     struct ttf_table *oldcvt;
-    int oldcvtlen;
+    unsigned oldcvtlen;
 };
 
 struct subhead { uint16 first, cnt, delta, rangeoff; };	/* a sub header in 8/16 cmap table */

@@ -27,15 +27,28 @@
 
 ACLOCAL_AMFLAGS = -I m4
 
+# Ignore files installed by gnulib-tool
+GITIGNOREFILES = \
+	.gitmodules \
+	INSTALL \
+	aclocal.m4 \
+	config/ \
+	gnulib/ \
+	lib/ \
+	libltdl/
+
+
 #--------------------------------------------------------------------------
 
 AM_CPPFLAGS =
 AM_LDFLAGS =
 
-BUILT_SOURCES =
+BUILT_SOURCES = uthash/src
 EXTRA_DIST =
 CLEANFILES =
 MOSTLYCLEANFILES =
+MAINTAINERCLEANFILES=config.h.in
+DISTCLEANFILES=config.h stamp-h1
 
 include_HEADERS =
 noinst_LTLIBRARIES =
@@ -46,7 +59,7 @@ include $(top_srcdir)/mk/layout.am
 
 #--------------------------------------------------------------------------
 
-SUBDIRS = inc libltdl Unicode gutils
+SUBDIRS = inc lib libltdl Unicode gutils breakpad
 
 if LIBZMQ
 SUBDIRS += collab
@@ -88,18 +101,19 @@ SUBDIRS += \
 nodist_pkgconfig_DATA = libfontforge.pc libfontforgeexe.pc
 
 EXTRA_DIST += \
-	autogen.sh \
+	m4/gnulib-cache.m4 \
+	bootstrap \
+	bootstrap.conf \
 	COPYING.gplv3 \
-	descrip.mms \
 	LICENSE \
 	doc/README-Mac.html \
 	doc/README-MS.html \
 	doc/README-unix	\
 	doc/README-Unix.html \
-	doc/Readme.VMS \
 	Packaging/FontForge-doc.spec \
 	Packaging/FontForge.spec \
 	Packaging/FontForge.static.spec \
+	uthash/src \
 	$(NULL)
 
 #--------------------------------------------------------------------------
@@ -115,5 +129,19 @@ DISTCHECK_CONFIGURE_FLAGS = --enable-theme-2012 --enable-debug
 
 
 #--------------------------------------------------------------------------
+uthash/src:
+	if [ ! -e uthash/src ]; then \
+	if [ -e uthash ] ; then rm -r uthash ; fi ; \
+	git clone https://github.com/troydhanson/uthash ; \
+	fi ;
+
+# We import a selection of targets from Frank's standard packaging Makefile.
+
+# automake can't parse certain parts of Makefile syntax,
+# and there isn't an easy way to make it copy things that it doesn't
+# understand without grouching, so we use a sneaky trick, specifically
+# a blank macro from configure.ac so as to bypass evaluation.
+
+@BLANK2@-include $(top_srcdir)/pkg.mk
 
 -include $(top_srcdir)/git.mk
