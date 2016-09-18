@@ -1045,6 +1045,7 @@ static void MVRemetric(MetricsView *mv) {
     MVRefreshMetric(mv);
 }
 
+
 void MVReKern(MetricsView *mv) {
     MVRemetric(mv);
     GDrawRequestExpose(mv->v,NULL,false);

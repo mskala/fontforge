@@ -5793,7 +5793,6 @@ static void FVMenuCollabCloseLocalServer(GWindow gw, struct gmenuitem *UNUSED(mi
     AskAndMaybeCloseLocalCollabServers();
 }
 
-
 #if defined(__MINGW32__)
 //
 // This is an imperfect implemenation of kill() for windows.
